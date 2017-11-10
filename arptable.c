@@ -163,7 +163,7 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 			inet_ntoa(addr),
 			addr_node->entry->hwaddr[0], addr_node->entry->hwaddr[1], addr_node->entry->hwaddr[2], addr_node->entry->hwaddr[3], addr_node->entry->hwaddr[4], addr_node->entry->hwaddr[5]);
 
-	} else if (addr_node != NULL && hwaddr_node == NULL) {
+	} else if (addr_node == NULL && hwaddr_node != NULL) {
 		char tmp[sizeof "xxx.xxx.xxx.xxx"];
 		snprintf(tmp, sizeof tmp, "%s", inet_ntoa(hwaddr_node->entry->addr));
 
