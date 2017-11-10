@@ -5,10 +5,10 @@
 #include <sys/ioctl.h>
 #include <net/if_arp.h>
 
-#include "ifinfo.h"
+#include "arp_dev.h"
 #include "err.h"
 
-int if_info_init(int sock, struct if_info *res, const char *name)
+int arp_dev_init(int sock, struct arp_dev *res, const char *name)
 {
 	int ret = -1;
 	struct ifreq req;
@@ -82,17 +82,17 @@ err:
 	return ret;
 }
 
-void if_info_deinit(struct if_info *info)
+void arp_dev_deinit(struct arp_dev *info)
 {
 	free(info->name);
 	info->name = NULL;
 }
 
-ssize_t if_info_discover(struct if_info **res)
+ssize_t arp_dev_discover(struct arp_dev **res)
 {
 	int sock;
 	struct ifconf ifconf;
-	struct if_info *table;
+	struct arp_dev *table;
 	ssize_t count;
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -139,7 +139,7 @@ ssize_t if_info_discover(struct if_info **res)
 	}
 
 	for (ssize_t i = 0 ; i < count ; i++) {
-		if (if_info_init(sock, &table[i], ifconf.ifc_req[i].ifr_name) < 0)
+		if (arp_dev_init(sock, &table[i], ifconf.ifc_req[i].ifr_name) < 0)
 			goto err_free_table;
 	}
 
@@ -162,7 +162,7 @@ err:
 	return -1;
 }
 
-void if_info_dump(const struct if_info *info)
+void arp_dev_dump(const struct arp_dev *info)
 {
 	printf("[%d] %s\n", info->index, info->name);
 	printf("\taddr      : %s\n", inet_ntoa(info->addr));

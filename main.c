@@ -6,10 +6,10 @@
 #include <poll.h>
 #include <time.h>
 
-#include "ifinfo.h"
-#include "frame.h"
+#include "arp_dev.h"
+#include "arp_frame.h"
 #include "err.h"
-#include "arptable.h"
+#include "arp_table.h"
 
 #define timespec_sub(a, b, res) set_normalized_timespec((res), (a)->tv_sec - (b)->tv_sec, (a)->tv_nsec - (b)->tv_nsec)
 
@@ -31,7 +31,7 @@ void set_normalized_timespec(struct timespec *ts, const time_t sec, const long n
         }
 }
 
-int arp_socket(const struct if_info *dev, struct sockaddr_ll *daddr)
+int arp_socket(const struct arp_dev *dev, struct sockaddr_ll *daddr)
 {
 	int sock = -1;
 
@@ -57,7 +57,7 @@ int main(int ac, char **av)
 	const char *dev;
 	const char *dest;
 	int i;
-	struct if_info info;
+	struct arp_dev info;
 	int sock;
 	struct sockaddr_ll saddr;
 	struct in_addr daddr;
@@ -96,10 +96,10 @@ int main(int ac, char **av)
 		goto usage;
 	}
 
-	if (if_info_init(-1, &info, dev) < 0)
+	if (arp_dev_init(-1, &info, dev) < 0)
 		goto err;
 
-	if_info_dump(&info);
+	arp_dev_dump(&info);
 
 	sock = arp_socket(&info, &saddr);
 	if (sock < 0)
@@ -160,7 +160,7 @@ int main(int ac, char **av)
 		}
 	}
 
-	if_info_deinit(&info);
+	arp_dev_deinit(&info);
 
 	ret = 0;
 err:

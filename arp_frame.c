@@ -1,9 +1,9 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "frame.h"
+#include "arp_frame.h"
 
-void arp_frame_req(const struct if_info *dev, const struct in_addr dest, struct arp_frame *req)
+void arp_frame_req(const struct arp_dev *dev, const struct in_addr dest, struct arp_frame *req)
 {
 	/*
 	 * Ethernet HDR
