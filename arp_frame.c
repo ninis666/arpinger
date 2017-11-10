@@ -26,6 +26,26 @@ void arp_frame_req(const struct arp_dev *dev, const struct in_addr dest, struct 
 	memcpy(&req->arp.arp_tpa, &dest, sizeof dest);
 }
 
+struct in_addr arp_frame_get_target_addr(const struct arp_frame *frame)
+{
+	return *((struct in_addr *)frame->arp.arp_tpa);
+}
+
+void arp_frame_set_target_addr(struct arp_frame *frame, const struct in_addr addr)
+{
+	*((struct in_addr *)frame->arp.arp_tpa) = addr;
+}
+
+struct in_addr arp_frame_get_source_addr(const struct arp_frame *frame)
+{
+	return *((struct in_addr *)frame->arp.arp_spa);
+}
+
+const uint8_t *arp_frame_get_source_hwaddr(const struct arp_frame *frame)
+{
+	return frame->arp.arp_sha;
+}
+
 int arp_frame_check(const struct arp_frame *frame)
 {
 

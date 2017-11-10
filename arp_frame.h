@@ -16,4 +16,10 @@ void arp_frame_req(const struct arp_dev *dev, const struct in_addr dest, struct 
 int arp_frame_check(const struct arp_frame *frame);
 void arp_frame_dump(const struct arp_frame *frame);
 
+struct in_addr arp_frame_get_target_addr(const struct arp_frame *frame);
+void arp_frame_set_target_addr(struct arp_frame *frame, const struct in_addr addr);
+
+struct in_addr arp_frame_get_source_addr(const struct arp_frame *frame);
+const uint8_t *arp_frame_get_source_hwaddr(const struct arp_frame *frame);
+
 #endif

@@ -115,6 +115,8 @@ int main(int ac, char **av)
 	arp_table_init(&table, 2, 2);
 
 	long delay_ms = 1000;
+	struct in_addr current_dest = daddr;
+
 	for (;;) {
 		struct arp_frame resp;
 		ssize_t resp_len;
@@ -127,15 +129,17 @@ int main(int ac, char **av)
 
 		timespec_sub(&now, &last, &dt);
 		if (dt.tv_sec * 1000 + dt.tv_nsec / (1000 * 1000) >= delay_ms) { /* Convert in ms ! */
-			last = now;
 
-			printf("REQ %s\n", inet_ntoa(*((const struct in_addr *)req.arp.arp_tpa)));
+			arp_frame_set_target_addr(&req, current_dest);
+			printf("REQ %s\n", inet_ntoa(arp_frame_get_target_addr(&req)));
 			if (sendto(sock, &req, sizeof req, 0, (struct sockaddr *)&saddr, sizeof saddr) <= 0) {
 				err("sendto : %m\n");
 				goto err;
 			}
 
-			req.arp.arp_tpa[3] ++;
+			current_dest = arp_frame_get_target_addr(&req);
+			current_dest.s_addr = htonl(htonl(current_dest.s_addr) + 1);
+			last = now;
 
 		}
 
@@ -155,7 +159,7 @@ int main(int ac, char **av)
 
 			if (resp_len >= sizeof resp && arp_frame_check(&resp)) {
 				//arp_frame_dump(&resp);
-				arp_table_add(&table, *((const struct in_addr *)resp.arp.arp_spa), resp.arp.arp_sha, &now);
+				arp_table_add(&table, arp_frame_get_source_addr(&resp), arp_frame_get_source_hwaddr(&resp), &now);
 			}
 		}
 	}
