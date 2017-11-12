@@ -71,7 +71,7 @@ void arp_frame_dump(const struct arp_frame *frame)
 {
 	printf("eth.ether_dhost : %02x:%02x:%02x:%02x:%02x:%02x\n", frame->eth.ether_dhost[0], frame->eth.ether_dhost[1], frame->eth.ether_dhost[2], frame->eth.ether_dhost[3], frame->eth.ether_dhost[4], frame->eth.ether_dhost[5]);
 	printf("eth.ether_shost : %02x:%02x:%02x:%02x:%02x:%02x\n", frame->eth.ether_shost[0], frame->eth.ether_shost[1], frame->eth.ether_shost[2], frame->eth.ether_shost[3], frame->eth.ether_shost[4], frame->eth.ether_shost[5]);
-	printf("eth.ether_type  : %#06x\n", htons(frame->eth.ether_type));
+	printf("eth.ether_type	: %#06x\n", htons(frame->eth.ether_type));
 
 	if (frame->eth.ether_type != htons(ETH_P_ARP)) {
 		printf("Unexpected ether_type (%#06x expected)\n", ETH_P_ARP);

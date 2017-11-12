@@ -165,7 +165,7 @@ err:
 void arp_dev_dump(const struct arp_dev *info)
 {
 	printf("[%d] %s\n", info->index, info->name);
-	printf("\taddr      : %s\n", inet_ntoa(info->addr));
+	printf("\taddr	    : %s\n", inet_ntoa(info->addr));
 	printf("\tnetmask   : %s\n", inet_ntoa(info->netmask));
 	printf("\tbroadcast : %s\n", inet_ntoa(info->broadcast));
 	printf("\thwaddress : %02x:%02x:%02x:%02x:%02x:%02x\n", info->hwaddr[0], info->hwaddr[1], info->hwaddr[2], info->hwaddr[3], info->hwaddr[4], info->hwaddr[5]);
