@@ -152,8 +152,8 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 			goto err;
 		}
 
-
-		fprintf(stderr, "IP %s added %02x:%02x:%02x:%02x:%02x:%02x\n", inet_ntoa(entry->addr),
+		dbg("IP %s added %02x:%02x:%02x:%02x:%02x:%02x\n",
+			inet_ntoa(entry->addr),
 			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
 
 	} else if (addr_node != NULL && hwaddr_node == NULL) {
@@ -181,7 +181,6 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 		entry->last_seen = *now;
 	}
 
-	arp_table_dump(table);
 	return entry;
 
 err:

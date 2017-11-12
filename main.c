@@ -5,6 +5,7 @@
 #include <linux/if_packet.h>
 #include <poll.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include "arp_dev.h"
 #include "arp_frame.h"
@@ -99,7 +100,14 @@ int main(int ac, char **av)
 	if (arp_dev_init(-1, &info, dev) < 0)
 		goto err;
 
-	arp_dev_dump(&info);
+	if (is_dbg()) {
+		char *res;
+
+		if (arp_dev_dump(&info, &res) > 0) {
+			dbg("Using :\n%s\n", res);
+			free(res);
+		}
+	}
 
 	sock = arp_socket(&info, &saddr);
 	if (sock < 0)
@@ -131,7 +139,16 @@ int main(int ac, char **av)
 		if (dt.tv_sec * 1000 + dt.tv_nsec / (1000 * 1000) >= delay_ms) { /* Convert in ms ! */
 
 			arp_frame_set_target_addr(&req, current_dest);
-			printf("REQ %s\n", inet_ntoa(arp_frame_get_target_addr(&req)));
+
+			if (is_vrb()) {
+				char *res;
+				if (arp_frame_dump(&req, &res) > 0) {
+					vrb("ARP_REQ :\n%s\n", res);
+					free(res);
+				}
+			} else if (is_dbg())
+				dbg("ARP_REQ %s\n", inet_ntoa(arp_frame_get_target_addr(&req)));
+
 			if (sendto(sock, &req, sizeof req, 0, (struct sockaddr *)&saddr, sizeof saddr) <= 0) {
 				err("sendto : %m\n");
 				goto err;
@@ -158,7 +175,15 @@ int main(int ac, char **av)
 			}
 
 			if (resp_len >= sizeof resp && arp_frame_check(&resp)) {
-				//arp_frame_dump(&resp);
+
+				if (is_vrb()) {
+					char *res;
+					if (arp_frame_dump(&resp, &res) > 0) {
+						vrb("ARP_RSP :\n%s\n", res);
+						free(res);
+					}
+				}
+
 				arp_table_add(&table, arp_frame_get_source_addr(&resp), arp_frame_get_source_hwaddr(&resp), &now);
 			}
 		}

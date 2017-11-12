@@ -20,6 +20,6 @@ struct arp_dev {
 int arp_dev_init(int sock, struct arp_dev *res, const char *name);
 void arp_dev_deinit(struct arp_dev *info);
 ssize_t arp_dev_discover(struct arp_dev **res);
-void arp_dev_dump(const struct arp_dev *info);
+size_t arp_dev_dump(const struct arp_dev *info, char **res);
 
 #endif

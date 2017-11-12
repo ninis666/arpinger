@@ -162,11 +162,26 @@ err:
 	return -1;
 }
 
-void arp_dev_dump(const struct arp_dev *info)
+size_t arp_dev_dump(const struct arp_dev *info, char **res)
 {
-	printf("[%d] %s\n", info->index, info->name);
-	printf("\taddr	    : %s\n", inet_ntoa(info->addr));
-	printf("\tnetmask   : %s\n", inet_ntoa(info->netmask));
-	printf("\tbroadcast : %s\n", inet_ntoa(info->broadcast));
-	printf("\thwaddress : %02x:%02x:%02x:%02x:%02x:%02x\n", info->hwaddr[0], info->hwaddr[1], info->hwaddr[2], info->hwaddr[3], info->hwaddr[4], info->hwaddr[5]);
+	FILE *fp;
+	char *ptr = NULL;
+	size_t size = 0;
+
+	fp = open_memstream(&ptr, &size);
+	if (fp == NULL) {
+		err("open_memstream failed : %m\n");
+		goto err;
+	}
+
+	fprintf(fp, "[%d] %s\n", info->index, info->name);
+	fprintf(fp, "\taddr	    : %s\n", inet_ntoa(info->addr));
+	fprintf(fp, "\tnetmask   : %s\n", inet_ntoa(info->netmask));
+	fprintf(fp, "\tbroadcast : %s\n", inet_ntoa(info->broadcast));
+	fprintf(fp, "\thwaddress : %02x:%02x:%02x:%02x:%02x:%02x\n", info->hwaddr[0], info->hwaddr[1], info->hwaddr[2], info->hwaddr[3], info->hwaddr[4], info->hwaddr[5]);
+
+	fclose(fp);
+err:
+	*res = ptr;
+	return size;
 }
