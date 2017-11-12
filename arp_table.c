@@ -4,7 +4,7 @@
 #include <arpa/inet.h>
 
 #include "arp_table.h"
-#include "err.h"
+#include "log.h"
 
 int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const size_t hwaddr_max_hash)
 {

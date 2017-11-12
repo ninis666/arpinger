@@ -8,7 +8,7 @@
 
 #include "arp_dev.h"
 #include "arp_frame.h"
-#include "err.h"
+#include "log.h"
 #include "arp_table.h"
 
 #define timespec_sub(a, b, res) set_normalized_timespec((res), (a)->tv_sec - (b)->tv_sec, (a)->tv_nsec - (b)->tv_nsec)

@@ -6,7 +6,7 @@
 #include <net/if_arp.h>
 
 #include "arp_dev.h"
-#include "err.h"
+#include "log.h"
 
 int arp_dev_init(int sock, struct arp_dev *res, const char *name)
 {
