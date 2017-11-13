@@ -16,7 +16,7 @@ struct arp_entry {
 };
 
 struct arp_hash_node {
-	const struct arp_entry *entry;
+	struct arp_entry *entry;
 	struct arp_hash_node *next;
 	struct arp_hash_node *prev;
 };

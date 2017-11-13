@@ -71,7 +71,7 @@ static void entry_free(struct arp_table *table, struct arp_entry *entry)
 	free(entry);
 }
 
-static struct arp_hash_node *node_alloc(struct arp_hash_node **first_ptr, const struct arp_entry *entry)
+static struct arp_hash_node *node_alloc(struct arp_hash_node **first_ptr, struct arp_entry *entry)
 {
 	struct arp_hash_node *node;
 	struct arp_hash_node *first = *first_ptr;
@@ -115,23 +115,43 @@ void arp_table_dump(const struct arp_table *table)
 	}
 }
 
+static struct arp_hash_node *node_lookup_addr(struct arp_hash_node *first, const struct in_addr addr)
+{
+	struct arp_hash_node *node;
+
+	for (node = first ; node != NULL ; node = node->next) {
+		if (node->entry->addr.s_addr == addr.s_addr)
+			break;
+	}
+
+	return node;
+}
+
+static struct arp_hash_node *node_lookup_hwaddr(struct arp_hash_node *first, const uint8_t *hwaddr)
+{
+	struct arp_hash_node *node;
+
+	for (node = first ; node != NULL ; node = node->next) {
+		if (memcmp(node->entry->hwaddr, hwaddr, sizeof node->entry->hwaddr) == 0)
+			break;
+	}
+
+	return node;
+}
+
+# define hwaddr_hash(table, hwaddr) ((hwaddr[5] & 0xF) % table->hwaddr_max_hash)
+# define addr_hash(table, addr)     ((addr.s_addr & 0xF) % table->addr_max_hash)
+
 struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now)
 {
-	const size_t addr_hash = (addr.s_addr & 0xF) % table->addr_max_hash;
-	const size_t hwaddr_hash = (hwaddr[5] & 0xF) % table->hwaddr_max_hash;
+	const size_t addr_hash = addr_hash(table, addr);
+	const size_t hwaddr_hash = hwaddr_hash(table, hwaddr);
 	struct arp_hash_node *addr_node;
 	struct arp_hash_node *hwaddr_node;
 	struct arp_entry *entry = NULL;
 
-	for (addr_node = table->addr_hash[addr_hash] ; addr_node != NULL ; addr_node = addr_node->next) {
-		if (addr_node->entry->addr.s_addr == addr.s_addr)
-			break;
-	}
-
-	for (hwaddr_node = table->hwaddr_hash[hwaddr_hash] ; hwaddr_node != NULL ; hwaddr_node = hwaddr_node->next) {
-		if (memcmp(hwaddr_node->entry->hwaddr, hwaddr, sizeof hwaddr_node->entry->hwaddr) == 0)
-			break;
-	}
+	addr_node = node_lookup_addr(table->addr_hash[addr_hash], addr);
+	hwaddr_node = node_lookup_hwaddr(table->hwaddr_hash[hwaddr_hash], hwaddr);
 
 	if (addr_node == NULL && hwaddr_node == NULL) {
 
@@ -152,30 +172,76 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 			goto err;
 		}
 
-		dbg("IP %s added %02x:%02x:%02x:%02x:%02x:%02x\n",
+		dbg("IP %s added to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
 			inet_ntoa(entry->addr),
 			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
 
 	} else if (addr_node != NULL && hwaddr_node == NULL) {
+		size_t old_hwaddr_hash;
+		struct arp_hash_node *old_hwaddr_node;
 
-		wrn("%02x:%02x:%02x:%02x:%02x:%02x stolled IP %s (previously holded by %02x:%02x:%02x:%02x:%02x:%02x)\n",
+		entry = addr_node->entry;
+
+		wrn("HW %02x:%02x:%02x:%02x:%02x:%02x stolled IP %s (previously holded by HW %02x:%02x:%02x:%02x:%02x:%02x)\n",
 			hwaddr[0], hwaddr[1], hwaddr[2], hwaddr[3], hwaddr[4], hwaddr[5],
 			inet_ntoa(addr),
-			addr_node->entry->hwaddr[0], addr_node->entry->hwaddr[1], addr_node->entry->hwaddr[2], addr_node->entry->hwaddr[3], addr_node->entry->hwaddr[4], addr_node->entry->hwaddr[5]);
+			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
+
+		/*
+		 * Add a new hwaddr with the addr entry and remove the old one
+		 */
+
+		old_hwaddr_hash = hwaddr_hash(table, entry->hwaddr);
+		old_hwaddr_node = node_lookup_hwaddr(table->hwaddr_hash[old_hwaddr_hash], entry->hwaddr);
+		chk(old_hwaddr_node != NULL);
+		chk(old_hwaddr_node->entry == entry);
+
+		hwaddr_node = node_alloc(&table->hwaddr_hash[hwaddr_hash], entry);
+		if (hwaddr_node == NULL)
+			goto err;
+		node_free(&table->hwaddr_hash[old_hwaddr_hash], old_hwaddr_node);
+		memcpy(entry->hwaddr, hwaddr, sizeof entry->hwaddr);
+
+		dbg("IP %s updated to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
+			inet_ntoa(entry->addr),
+			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
+
 
 	} else if (addr_node == NULL && hwaddr_node != NULL) {
+		size_t old_addr_hash;
+		struct arp_hash_node *old_addr_node;
 		char tmp[sizeof "xxx.xxx.xxx.xxx"];
-		snprintf(tmp, sizeof tmp, "%s", inet_ntoa(hwaddr_node->entry->addr));
 
-		wrn("IP %s stolled %02x:%02x:%02x:%02x:%02x:%02x (previously holded by IP %s)\n",
+		entry = hwaddr_node->entry;
+
+		snprintf(tmp, sizeof tmp, "%s", inet_ntoa(entry->addr));
+		wrn("IP %s stolled HW %02x:%02x:%02x:%02x:%02x:%02x (previously holded by IP %s)\n",
 			inet_ntoa(addr),
 			hwaddr[0], hwaddr[1], hwaddr[2], hwaddr[3], hwaddr[4], hwaddr[5],
 			tmp);
 
+		/*
+		 * Add a new addr with the hwaddr entry and remove the old one
+		 */
+
+		old_addr_hash = addr_hash(table, entry->addr);
+		old_addr_node = node_lookup_addr(table->addr_hash[old_addr_hash], entry->addr);
+		chk(old_addr_node != NULL);
+		chk(old_addr_node->entry == entry);
+
+		addr_node = node_alloc(&table->addr_hash[addr_hash], entry);
+		if (addr_node == NULL)
+			goto err;
+		node_free(&table->addr_hash[old_addr_hash], old_addr_node);
+		entry->addr = addr;
+
+		dbg("HW %02x:%02x:%02x:%02x:%02x:%02x updated to IP %s\n",
+			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5],
+			inet_ntoa(entry->addr));
+
 	} else {
 
-		if (addr_node->entry != hwaddr_node->entry)
-			die("Internal fuck\n");
+		chk(addr_node->entry == hwaddr_node->entry);
 
 		entry = (struct arp_entry *)addr_node->entry;
 		entry->last_seen = *now;
