@@ -55,50 +55,48 @@ err:
 int main(int ac, char **av)
 {
 	int ret = 1;
-	const char *dev;
-	const char *dest;
+	const char *dev = (ac >= 2) ? av[1] : "eth0";
+	const char *from = (ac >= 3) ? av[2] : NULL;
+	const char *to = (ac >= 4) ? av[3] : NULL;
 	int i;
 	struct arp_dev info;
 	int sock;
 	struct sockaddr_ll saddr;
-	struct in_addr daddr;
 	struct arp_frame req;
 	struct pollfd fds;
 	struct timespec last;
 	struct arp_table table;
+	struct in_addr daddr_from;
+	struct in_addr daddr_to;
 
-	dest = NULL;
-	dev = NULL;
 	for (i = 1 ; i < ac ; i++) {
-		if (strcmp(av[i], "-dev") == 0) {
-			if (i + 1 >= ac)
-				goto no_arg;
-			dev = av[i + 1];
-			i++;
-		} else
-			dest = av[i];
-		continue;
-
-	no_arg:
-		fprintf(stderr, "No argument for %s option\n", av[i]);
-	usage:
-		fprintf(stderr, "Usage : %s [-dev [device_name]] [dest]\n", av[0]);
-		return 1;
-	}
-
-	if (dev == NULL)
-		goto usage;
-
-	if (dest == NULL)
-		goto usage;
-
-	if (inet_aton(dest, &daddr) == 0) {
-		err("Invalid dest : %s\n", dest);
-		goto usage;
+		if (strcmp(av[i], "-help") == 0 || strcmp(av[i], "--help") == 0) {
+		usage:
+			fprintf(stderr, "Usage : %s [device] [from] [to]\n", av[0]);
+			return 1;
+		}
 	}
 
 	if (arp_dev_init(-1, &info, dev) < 0)
 		goto err;
+
+	if (from == NULL)
+		daddr_from.s_addr = (info.addr.s_addr & info.netmask.s_addr) + htonl(1);
+	else {
+		if (inet_aton(from, &daddr_from) == 0) {
+			err("Invalid from : %s\n", from);
+			goto usage;
+		}
+	}
+
+	if (to == NULL)
+		daddr_to.s_addr = info.broadcast.s_addr - 1;
+	else {
+		if (inet_aton(to, &daddr_to) == 0) {
+			err("Invalid to : %s\n", to);
+			goto usage;
+		}
+	}
 
 	if (is_dbg()) {
 		char *res;
@@ -113,7 +111,7 @@ int main(int ac, char **av)
 	if (sock < 0)
 		goto err;
 
-	arp_frame_req(&info, daddr, &req);
+	arp_frame_req(&info, &req);
 
 	fds.fd = sock;
 	fds.events = POLLIN | POLLERR;
@@ -123,7 +121,7 @@ int main(int ac, char **av)
 	arp_table_init(&table, 2, 2);
 
 	long delay_ms = 1000;
-	struct in_addr current_dest = daddr;
+	struct in_addr current_dest = daddr_from;
 
 	for (;;) {
 		struct arp_frame resp;
@@ -154,8 +152,10 @@ int main(int ac, char **av)
 				goto err;
 			}
 
-			current_dest = arp_frame_get_target_addr(&req);
-			current_dest.s_addr = htonl(htonl(current_dest.s_addr) + 1);
+			current_dest.s_addr += htonl(1);
+			if (current_dest.s_addr > daddr_to.s_addr)
+				current_dest = daddr_from;
+
 			last = now;
 
 		}

@@ -12,7 +12,7 @@ struct arp_frame {
 	struct ether_arp arp;
 } __attribute__ ((__packed__));
 
-void arp_frame_req(const struct arp_dev *dev, const struct in_addr dest, struct arp_frame *req);
+void arp_frame_req(const struct arp_dev *dev, struct arp_frame *req);
 int arp_frame_check(const struct arp_frame *frame);
 size_t arp_frame_dump(const struct arp_frame *frame, char **res);
 

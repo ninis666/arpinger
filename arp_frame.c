@@ -4,8 +4,10 @@
 #include "arp_frame.h"
 #include "log.h"
 
-void arp_frame_req(const struct arp_dev *dev, const struct in_addr dest, struct arp_frame *req)
+void arp_frame_req(const struct arp_dev *dev, struct arp_frame *req)
 {
+	struct in_addr dest;
+
 	/*
 	 * Ethernet HDR
 	 */
@@ -24,6 +26,8 @@ void arp_frame_req(const struct arp_dev *dev, const struct in_addr dest, struct 
 	memcpy(&req->arp.arp_sha, dev->hwaddr, sizeof dev->hwaddr);
 	memcpy(&req->arp.arp_spa, &dev->addr, sizeof dev->addr);
 	memset(&req->arp.arp_tha, 0xFF, sizeof dev->hwaddr);
+
+	dest.s_addr = dev->broadcast.s_addr + htonl(1);
 	memcpy(&req->arp.arp_tpa, &dest, sizeof dest);
 }
 
