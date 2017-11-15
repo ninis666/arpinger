@@ -80,11 +80,6 @@ static struct arp_list *arp_list_hwaddr(const struct arp_table *table, const uin
 	return &table->hwaddr_list[hwaddr_hash(table, hwaddr)];
 }
 
-static void node_link_pool(struct arp_list *list, struct arp_entry *entry)
-{
-	node_link(list, entry, pool_node);
-}
-
 static void node_link_addr(struct arp_list *list, struct arp_entry *entry)
 {
 	node_link(list, entry, addr_node);
@@ -93,11 +88,6 @@ static void node_link_addr(struct arp_list *list, struct arp_entry *entry)
 static void node_link_hwaddr(struct arp_list *list, struct arp_entry *entry)
 {
 	node_link(list, entry, hwaddr_node);
-}
-
-static void node_unlink_pool(struct arp_list *list, struct arp_entry *entry)
-{
-	node_unlink(list, entry, pool_node);
 }
 
 static void node_unlink_addr(struct arp_list *list, struct arp_entry *entry)
@@ -125,7 +115,7 @@ static struct arp_entry *entry_alloc(struct arp_table *table, const struct in_ad
 	entry->first_seen = *now;
 	entry->last_seen = *now;
 
-	node_link_pool(&table->pool_list, entry);
+	node_link(&table->pool_list, entry, pool_node);
 
 err:
 	return entry;
@@ -134,7 +124,7 @@ err:
 static void __attribute__((unused)) entry_free(struct arp_table *table, struct arp_entry *entry)
 {
 	if (node_is_linked(entry, pool_node))
-		node_unlink_pool(&table->pool_list, entry);
+		node_unlink(&table->pool_list, entry, pool_node);
 
 	if (node_is_linked(entry, addr_node))
 		node_unlink_addr(arp_list_addr(table, entry->addr), entry);
@@ -267,6 +257,10 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 	}
 
 	entry->last_seen = *now;
+
+	if (node_is_linked(entry, seen_node))
+		node_unlink(&table->seen_list, entry, seen_node);
+	node_link(&table->seen_list, entry, seen_node);
 
 	return entry;
 

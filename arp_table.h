@@ -14,7 +14,7 @@ struct arp_entry {
 	struct {
 		struct arp_entry *next;
 		struct arp_entry *prev;
-	} pool_node, addr_node, hwaddr_node;
+	} pool_node, addr_node, hwaddr_node, seen_node;
 };
 
 struct arp_list {
@@ -30,6 +30,8 @@ struct arp_table {
 
 	struct arp_list *hwaddr_list;
 	size_t hwaddr_max_hash;
+
+	struct arp_list seen_list;
 };
 
 int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const size_t hwaddr_max_hash);
