@@ -14,16 +14,21 @@ struct arp_entry {
 	struct {
 		struct arp_entry *next;
 		struct arp_entry *prev;
-	} pool, addr_hash, hwaddr_hash;
+	} pool_node, addr_node, hwaddr_node;
+};
+
+struct arp_list {
+	struct arp_entry *first;
+	struct arp_entry *last;
 };
 
 struct arp_table {
-	struct arp_entry *pool_first;
+	struct arp_list pool_list;
 
-	struct arp_entry **addr_hash;
+	struct arp_list *addr_list;
 	size_t addr_max_hash;
 
-	struct arp_entry **hwaddr_hash;
+	struct arp_list *hwaddr_list;
 	size_t hwaddr_max_hash;
 };
 
