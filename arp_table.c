@@ -5,6 +5,7 @@
 
 #include "arp_table.h"
 #include "log.h"
+#include "time_utils.h"
 
 int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const size_t hwaddr_max_hash)
 {
@@ -121,7 +122,7 @@ err:
 	return entry;
 }
 
-static void __attribute__((unused)) entry_free(struct arp_table *table, struct arp_entry *entry)
+static void entry_free(struct arp_table *table, struct arp_entry *entry)
 {
 	if (node_is_linked(entry, pool_node))
 		node_unlink(&table->pool_list, entry, pool_node);
@@ -132,14 +133,29 @@ static void __attribute__((unused)) entry_free(struct arp_table *table, struct a
 	if (node_is_linked(entry, hwaddr_node))
 		node_unlink_hwaddr(arp_list_hwaddr(table, entry->hwaddr), entry);
 
+	if (node_is_linked(entry, seen_node))
+		node_unlink(&table->seen_list, entry, seen_node);
+
 	free(entry);
 }
 
 void arp_table_dump(const struct arp_table *table)
 {
 	for (struct arp_entry *node = table->pool_list.first ; node != NULL ; node = node->pool_node.next) {
-		fprintf(stderr, "%s %02x:%02x:%02x:%02x:%02x:%02x\n", inet_ntoa(node->addr),
-			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5]);
+		fprintf(stderr, "%s %02x:%02x:%02x:%02x:%02x:%02x, first = { %lds, %ldns }, last = { %lds, %ldns }\n", inet_ntoa(node->addr),
+			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5],
+			node->first_seen.tv_sec, node->first_seen.tv_nsec,
+			node->last_seen.tv_sec, node->last_seen.tv_nsec);
+	}
+}
+
+void arp_table_dump_seen(const struct arp_table *table)
+{
+	for (struct arp_entry *node = table->seen_list.first ; node != NULL ; node = node->seen_node.next) {
+		fprintf(stderr, "%s %02x:%02x:%02x:%02x:%02x:%02x, first = { %lds, %ldns }, last = { %lds, %ldns }\n", inet_ntoa(node->addr),
+			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5],
+			node->first_seen.tv_sec, node->first_seen.tv_nsec,
+			node->last_seen.tv_sec, node->last_seen.tv_nsec);
 	}
 }
 
@@ -237,7 +253,6 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 		/*
 		 * Add a new addr with the hwaddr entry and remove the old one
 		 */
-
 		old_addr_list = &table->addr_list[addr_hash(table, entry->addr)];
 		old_addr_node = node_lookup_addr(old_addr_list, entry->addr);
 		chk(old_addr_node == entry);
@@ -254,6 +269,11 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 		chk(addr_node == hwaddr_node);
 		entry = addr_node;
+
+		vrb("IP %s still binded to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
+			inet_ntoa(entry->addr),
+			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
+
 	}
 
 	entry->last_seen = *now;
@@ -266,4 +286,32 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 err:
 	return NULL;
+}
+
+size_t arp_table_check_expired(struct arp_table *table, const struct timespec *now, const long expired_ms)
+{
+	struct arp_entry *node;
+	size_t count = 0;
+
+	node = table->seen_list.first;
+	while (node != NULL) {
+		struct arp_entry *next = node->seen_node.next;
+		struct timespec dt;
+
+		timespec_sub(now, &node->last_seen, &dt);
+		if (timespec_to_ms(&dt) < expired_ms)
+			break;
+
+		wrn("IP %s binded to HW %02x:%02x:%02x:%02x:%02x:%02x expired since %ldms\n",
+			inet_ntoa(node->addr),
+			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5],
+			timespec_to_ms(&dt));
+
+		entry_free(table, node);
+		count ++;
+
+		node = next;
+	}
+
+	return count;
 }

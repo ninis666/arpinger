@@ -9,28 +9,9 @@
 
 #include "arp_dev.h"
 #include "arp_frame.h"
-#include "log.h"
 #include "arp_table.h"
-
-#define timespec_sub(a, b, res) set_normalized_timespec((res), (a)->tv_sec - (b)->tv_sec, (a)->tv_nsec - (b)->tv_nsec)
-
-void set_normalized_timespec(struct timespec *ts, const time_t sec, const long nsec)
-{
-	const long nsec_per_sec = (1 * 1000 * 1000 * 1000);
-
-	ts->tv_sec = sec;
-	ts->tv_nsec = nsec;
-
-	while (ts->tv_nsec >= nsec_per_sec) {
-		ts->tv_nsec -= nsec_per_sec;
-		++ts->tv_sec;
-	}
-
-	while (ts->tv_nsec < 0) {
-		ts->tv_nsec += nsec_per_sec;
-		--ts->tv_sec;
-	}
-}
+#include "log.h"
+#include "time_utils.h"
 
 int arp_socket(const struct arp_dev *dev, struct sockaddr_ll *daddr)
 {
@@ -64,10 +45,14 @@ int main(int ac, char **av)
 	struct sockaddr_ll saddr;
 	struct arp_frame req;
 	struct pollfd fds;
-	struct timespec last;
 	struct arp_table table;
 	struct in_addr daddr_from;
 	struct in_addr daddr_to;
+	long delay_ms = 1000;
+	long expire_ms;
+	struct in_addr current_dest;
+	struct timespec last_stat;
+	struct timespec last_req;
 
 	for (i = 1 ; i < ac ; i++) {
 		if (strcmp(av[i], "-help") == 0 || strcmp(av[i], "--help") == 0) {
@@ -116,36 +101,26 @@ int main(int ac, char **av)
 	fds.fd = sock;
 	fds.events = POLLIN | POLLERR;
 	fds.revents = 0;
-	memset(&last, 0, sizeof last);
+	memset(&last_req, 0, sizeof last_req);
+	memset(&last_stat, 0, sizeof last_stat);
+	current_dest = daddr_from;
+	expire_ms = delay_ms * (htonl(daddr_to.s_addr) - htonl(daddr_from.s_addr)) * 8; /* Enough time to discover all the network */
 
-	arp_table_init(&table, 2, 2);
-
-	long delay_ms = 1000;
-	struct in_addr current_dest = daddr_from;
+	arp_table_init(&table, 1, 1);
 
 	for (;;) {
 		struct arp_frame resp;
 		ssize_t resp_len;
 		struct timespec now, dt;
+		int ret;
 
-		if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) {
-			err("clock_gettime : %m\n");
-			goto err;
-		}
-
-		timespec_sub(&now, &last, &dt);
-		if (dt.tv_sec * 1000 + dt.tv_nsec / (1000 * 1000) >= delay_ms) { /* Convert in ms ! */
+		ret = clock_gettime(CLOCK_MONOTONIC, &now);
+		chk(ret >= 0);
+		timespec_sub(&now, &last_req, &dt);
+		if (timespec_to_ms(&dt) >= delay_ms) { /* Convert in ms ! */
 
 			arp_frame_set_target_addr(&req, current_dest);
-
-			if (is_vrb()) {
-				char *res;
-				if (arp_frame_dump(&req, &res) > 0) {
-					vrb("ARP_REQ :\n%s\n", res);
-					free(res);
-				}
-			} else if (is_dbg())
-				dbg("ARP_REQ %s\n", inet_ntoa(arp_frame_get_target_addr(&req)));
+			vrb("ARP_REQ %s\n", inet_ntoa(arp_frame_get_target_addr(&req)));
 
 			if (sendto(sock, &req, sizeof req, 0, (struct sockaddr *)&saddr, sizeof saddr) <= 0) {
 				err("sendto : %m\n");
@@ -155,9 +130,16 @@ int main(int ac, char **av)
 			current_dest.s_addr += htonl(1);
 			if (current_dest.s_addr > daddr_to.s_addr)
 				current_dest = daddr_from;
+			last_req = now;
+		}
 
-			last = now;
-
+		ret = clock_gettime(CLOCK_MONOTONIC, &now);
+		chk(ret >= 0);
+		timespec_sub(&now, &last_stat, &dt);
+		if (timespec_to_ms(&dt) >= expire_ms) {
+			arp_table_check_expired(&table, &now, expire_ms);
+			arp_table_dump_seen(&table);
+			last_stat = now;
 		}
 
 		i = poll(&fds, 1, (delay_ms <= 1) ? 1 : delay_ms / 2);
@@ -174,7 +156,7 @@ int main(int ac, char **av)
 				goto err;
 			}
 
-			if (resp_len >= sizeof resp && arp_frame_check(&resp)) {
+			if ((size_t )resp_len >= sizeof resp && arp_frame_check(&resp)) {
 
 				if (is_vrb()) {
 					char *res;
