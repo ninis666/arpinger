@@ -48,91 +48,100 @@ static struct arp_entry *entry_alloc(struct arp_table *table, const struct in_ad
 	entry->first_seen = *now;
 	entry->last_seen = *now;
 
-	entry->prev = NULL;
-	entry->next = table->pool;
-	if (table->pool != NULL)
-		table->pool->prev = entry;
-	table->pool = entry;
+	entry->pool.prev = NULL;
+	entry->pool.next = table->pool_first;
+	if (table->pool_first != NULL)
+		table->pool_first->pool.prev = entry;
+	table->pool_first = entry;
 err:
 	return entry;
 }
 
-static void entry_free(struct arp_table *table, struct arp_entry *entry)
+static void __attribute__((unused)) entry_free(struct arp_table *table, struct arp_entry *entry)
 {
 
-	if (entry->next != NULL)
-		entry->next->prev = entry->prev;
+	if (entry->pool.next != NULL)
+		entry->pool.next->pool.prev = entry->pool.prev;
 
-	if (entry->prev != NULL)
-		entry->prev->next = entry->next;
+	if (entry->pool.prev != NULL)
+		entry->pool.prev->pool.next = entry->pool.next;
 	else
-		table->pool = entry->next;
+		table->pool_first = entry->pool.next;
 
 	free(entry);
 }
 
-static struct arp_hash_node *node_alloc(struct arp_hash_node **first_ptr, struct arp_entry *entry)
+#define DO_LINK(f, e, what) do {		\
+		struct arp_entry *first = *(f);	\
+						\
+		(e)->what.prev = NULL;		\
+		(e)->what.next = first;		\
+		if (first != NULL)		\
+			first->what.prev = (e);	\
+		first = (e);			\
+		*(f) = first;			\
+	} while (0)
+
+static void node_link_addr(struct arp_entry **first_ptr, struct arp_entry *entry)
 {
-	struct arp_hash_node *node;
-	struct arp_hash_node *first = *first_ptr;
-
-	node = calloc(1, sizeof node[0]);
-	if (node == NULL) {
-		err("calloc : %m\n");
-		goto err;
-	}
-
-	node->prev = NULL;
-	node->next = first;
-	if (first != NULL)
-		first->prev = node;
-	first = node;
-	node->entry = entry;
-	*first_ptr = first;
-
-err:
-	return node;
+	DO_LINK(first_ptr, entry, addr_hash);
 }
 
-static void node_free(struct arp_hash_node **first_ptr, struct arp_hash_node *node)
+static void node_link_hwaddr(struct arp_entry **first_ptr, struct arp_entry *entry)
 {
-	if (node->next != NULL)
-		node->next->prev = node->prev;
+	DO_LINK(first_ptr, entry, hwaddr_hash);
+}
 
-	if (node->prev != NULL)
-		node->prev->next = node->next;
-	else
-		*first_ptr = node->next;
+#undef DO_LINK
 
-	free(node);
+#define DO_UNLINK(f, e, what) do {					\
+		if ((e)->what.next != NULL)				\
+			(e)->what.next->what.prev = (e)->what.prev;	\
+									\
+		if ((e)->what.prev != NULL)				\
+			(e)->what.prev->what.next = (e)->what.next;	\
+		else							\
+			*(f) = (e)->what.next;				\
+		(e)->what.next = NULL;					\
+		(e)->what.prev = NULL;					\
+	} while (0)
+
+static void node_unlink_addr(struct arp_entry **first_ptr, struct arp_entry *entry)
+{
+	DO_UNLINK(first_ptr, entry, addr_hash);
+}
+
+static void node_unlink_hwaddr(struct arp_entry **first_ptr, struct arp_entry *entry)
+{
+	DO_UNLINK(first_ptr, entry, hwaddr_hash);
 }
 
 void arp_table_dump(const struct arp_table *table)
 {
-	for (struct arp_entry *node = table->pool ; node != NULL ; node = node->next) {
+	for (struct arp_entry *node = table->pool_first ; node != NULL ; node = node->pool.next) {
 		fprintf(stderr, "%s %02x:%02x:%02x:%02x:%02x:%02x\n", inet_ntoa(node->addr),
 			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5]);
 	}
 }
 
-static struct arp_hash_node *node_lookup_addr(struct arp_hash_node *first, const struct in_addr addr)
+static struct arp_entry *node_lookup_addr(struct arp_entry *first, const struct in_addr addr)
 {
-	struct arp_hash_node *node;
+	struct arp_entry *node;
 
-	for (node = first ; node != NULL ; node = node->next) {
-		if (node->entry->addr.s_addr == addr.s_addr)
+	for (node = first ; node != NULL ; node = node->addr_hash.next) {
+		if (node->addr.s_addr == addr.s_addr)
 			break;
 	}
 
 	return node;
 }
 
-static struct arp_hash_node *node_lookup_hwaddr(struct arp_hash_node *first, const uint8_t *hwaddr)
+static struct arp_entry *node_lookup_hwaddr(struct arp_entry *first, const uint8_t *hwaddr)
 {
-	struct arp_hash_node *node;
+	struct arp_entry *node;
 
-	for (node = first ; node != NULL ; node = node->next) {
-		if (memcmp(node->entry->hwaddr, hwaddr, sizeof node->entry->hwaddr) == 0)
+	for (node = first ; node != NULL ; node = node->hwaddr_hash.next) {
+		if (memcmp(node->hwaddr, hwaddr, sizeof node->hwaddr) == 0)
 			break;
 	}
 
@@ -146,8 +155,8 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 {
 	const size_t addr_hash = addr_hash(table, addr);
 	const size_t hwaddr_hash = hwaddr_hash(table, hwaddr);
-	struct arp_hash_node *addr_node;
-	struct arp_hash_node *hwaddr_node;
+	struct arp_entry *addr_node;
+	struct arp_entry *hwaddr_node;
 	struct arp_entry *entry = NULL;
 
 	addr_node = node_lookup_addr(table->addr_hash[addr_hash], addr);
@@ -159,18 +168,8 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 		if (entry == NULL)
 			goto err;
 
-		addr_node = node_alloc(&table->addr_hash[addr_hash], entry);
-		if (addr_node == NULL) {
-			entry_free(table, entry);
-			goto err;
-		}
-
-		hwaddr_node = node_alloc(&table->hwaddr_hash[hwaddr_hash], entry);
-		if (hwaddr_node == NULL) {
-			node_free(&table->addr_hash[addr_hash], addr_node);
-			entry_free(table, entry);
-			goto err;
-		}
+		node_link_addr(&table->addr_hash[addr_hash], entry);
+		node_link_hwaddr(&table->hwaddr_hash[hwaddr_hash], entry);
 
 		dbg("IP %s added to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
 			inet_ntoa(entry->addr),
@@ -178,9 +177,9 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 	} else if (addr_node != NULL && hwaddr_node == NULL) {
 		size_t old_hwaddr_hash;
-		struct arp_hash_node *old_hwaddr_node;
+		struct arp_entry *old_hwaddr_node;
 
-		entry = addr_node->entry;
+		entry = addr_node;
 
 		wrn("HW %02x:%02x:%02x:%02x:%02x:%02x stolled IP %s (previously holded by HW %02x:%02x:%02x:%02x:%02x:%02x)\n",
 			hwaddr[0], hwaddr[1], hwaddr[2], hwaddr[3], hwaddr[4], hwaddr[5],
@@ -193,13 +192,10 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 		old_hwaddr_hash = hwaddr_hash(table, entry->hwaddr);
 		old_hwaddr_node = node_lookup_hwaddr(table->hwaddr_hash[old_hwaddr_hash], entry->hwaddr);
-		chk(old_hwaddr_node != NULL);
-		chk(old_hwaddr_node->entry == entry);
+		chk(old_hwaddr_node == entry);
 
-		hwaddr_node = node_alloc(&table->hwaddr_hash[hwaddr_hash], entry);
-		if (hwaddr_node == NULL)
-			goto err;
-		node_free(&table->hwaddr_hash[old_hwaddr_hash], old_hwaddr_node);
+		node_unlink_hwaddr(&table->hwaddr_hash[old_hwaddr_hash], old_hwaddr_node);
+		node_link_hwaddr(&table->hwaddr_hash[hwaddr_hash], entry);
 		memcpy(entry->hwaddr, hwaddr, sizeof entry->hwaddr);
 
 		dbg("IP %s updated to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -209,10 +205,10 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 	} else if (addr_node == NULL && hwaddr_node != NULL) {
 		size_t old_addr_hash;
-		struct arp_hash_node *old_addr_node;
+		struct arp_entry *old_addr_node;
 		char tmp[sizeof "xxx.xxx.xxx.xxx"];
 
-		entry = hwaddr_node->entry;
+		entry = hwaddr_node;
 
 		snprintf(tmp, sizeof tmp, "%s", inet_ntoa(entry->addr));
 		wrn("IP %s stolled HW %02x:%02x:%02x:%02x:%02x:%02x (previously holded by IP %s)\n",
@@ -226,13 +222,10 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 		old_addr_hash = addr_hash(table, entry->addr);
 		old_addr_node = node_lookup_addr(table->addr_hash[old_addr_hash], entry->addr);
-		chk(old_addr_node != NULL);
-		chk(old_addr_node->entry == entry);
+		chk(old_addr_node == entry);
 
-		addr_node = node_alloc(&table->addr_hash[addr_hash], entry);
-		if (addr_node == NULL)
-			goto err;
-		node_free(&table->addr_hash[old_addr_hash], old_addr_node);
+		node_unlink_addr(&table->addr_hash[old_addr_hash], old_addr_node);
+		node_link_addr(&table->addr_hash[addr_hash], entry);
 		entry->addr = addr;
 
 		dbg("HW %02x:%02x:%02x:%02x:%02x:%02x updated to IP %s\n",
@@ -241,12 +234,11 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 	} else {
 
-		chk(addr_node->entry == hwaddr_node->entry);
-
-		entry = (struct arp_entry *)addr_node->entry;
-		entry->last_seen = *now;
+		chk(addr_node == hwaddr_node);
+		entry = addr_node;
 	}
 
+	entry->last_seen = *now;
 	return entry;
 
 err:

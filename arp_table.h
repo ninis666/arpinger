@@ -11,23 +11,19 @@ struct arp_entry {
 	uint8_t hwaddr[ETH_ALEN];
 	struct timespec first_seen;
 	struct timespec last_seen;
-	struct arp_entry *next;
-	struct arp_entry *prev;
-};
-
-struct arp_hash_node {
-	struct arp_entry *entry;
-	struct arp_hash_node *next;
-	struct arp_hash_node *prev;
+	struct {
+		struct arp_entry *next;
+		struct arp_entry *prev;
+	} pool, addr_hash, hwaddr_hash;
 };
 
 struct arp_table {
-	struct arp_entry *pool;
+	struct arp_entry *pool_first;
 
-	struct arp_hash_node **addr_hash;
+	struct arp_entry **addr_hash;
 	size_t addr_max_hash;
 
-	struct arp_hash_node **hwaddr_hash;
+	struct arp_entry **hwaddr_hash;
 	size_t hwaddr_max_hash;
 };
 
