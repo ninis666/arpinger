@@ -84,8 +84,11 @@ static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct ar
 
 	res = poll(&fds, 1, poll_delay_ms);
 	if (res < 0) {
-		err("poll : %m\n");
-		goto err;
+		if (errno != EINTR) {
+			err("poll : %m\n");
+			goto err;
+		}
+		res = 0;
 	}
 
 	if (res == 0)

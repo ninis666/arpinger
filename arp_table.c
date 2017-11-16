@@ -319,7 +319,6 @@ size_t arp_table_check_expired(struct arp_table *table, const long expired_delay
 	timespec_sub(&now, &table->last_check, &dt);
 	if (timespec_to_ms(&dt) >= expired_delay_ms / 2) {
 		count = do_check(table, &now, expired_delay_ms);
-		arp_table_dump(table);
 		table->last_check = now;
 	}
 

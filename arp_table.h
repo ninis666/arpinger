@@ -39,6 +39,5 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 size_t arp_table_check_expired(struct arp_table *table, const long expired_ms);
 
 void arp_table_dump(const struct arp_table *table);
-void arp_table_dump_seen(const struct arp_table *table);
 
 #endif
