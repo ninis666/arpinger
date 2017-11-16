@@ -30,8 +30,6 @@ struct arp_table {
 
 	struct arp_list *hwaddr_list;
 	size_t hwaddr_max_hash;
-
-	struct arp_list seen_list;
 };
 
 int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const size_t hwaddr_max_hash);

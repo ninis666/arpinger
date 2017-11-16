@@ -141,23 +141,12 @@ static void entry_free(struct arp_table *table, struct arp_entry *entry)
 	node_try_unlink(&table->pool_list, entry, pool_node);
 	node_try_unlink(arp_list_addr(table, entry->addr), entry, addr_node);
 	node_try_unlink(arp_list_hwaddr(table, entry->hwaddr), entry, hwaddr_node);
-	node_try_unlink(&table->seen_list, entry, seen_node);
 	free(entry);
 }
 
 void arp_table_dump(const struct arp_table *table)
 {
 	for (struct arp_entry *node = table->pool_list.first ; node != NULL ; node = node->pool_node.next) {
-		fprintf(stderr, "%s %02x:%02x:%02x:%02x:%02x:%02x, first = { %lds, %ldns }, last = { %lds, %ldns }\n", inet_ntoa(node->addr),
-			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5],
-			node->first_seen.tv_sec, node->first_seen.tv_nsec,
-			node->last_seen.tv_sec, node->last_seen.tv_nsec);
-	}
-}
-
-void arp_table_dump_seen(const struct arp_table *table)
-{
-	for (struct arp_entry *node = table->seen_list.first ; node != NULL ; node = node->seen_node.next) {
 		fprintf(stderr, "%s %02x:%02x:%02x:%02x:%02x:%02x, first = { %lds, %ldns }, last = { %lds, %ldns }\n", inet_ntoa(node->addr),
 			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5],
 			node->first_seen.tv_sec, node->first_seen.tv_nsec,
@@ -284,9 +273,8 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 	entry->last_seen = *now;
 
-	if (node_is_linked(entry, seen_node))
-		node_unlink(&table->seen_list, entry, seen_node);
-	node_link(&table->seen_list, entry, seen_node);
+	node_unlink(&table->pool_list, entry, pool_node);
+	node_link(&table->pool_list, entry, pool_node);
 
 	return entry;
 
@@ -299,9 +287,9 @@ size_t arp_table_check_expired(struct arp_table *table, const struct timespec *n
 	struct arp_entry *node;
 	size_t count = 0;
 
-	node = table->seen_list.first;
+	node = table->pool_list.first;
 	while (node != NULL) {
-		struct arp_entry *next = node->seen_node.next;
+		struct arp_entry *next = node->pool_node.next;
 		struct timespec dt;
 
 		timespec_sub(now, &node->last_seen, &dt);

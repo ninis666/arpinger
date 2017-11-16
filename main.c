@@ -138,7 +138,7 @@ int main(int ac, char **av)
 		timespec_sub(&now, &last_stat, &dt);
 		if (timespec_to_ms(&dt) >= expire_ms) {
 			arp_table_check_expired(&table, &now, expire_ms);
-			arp_table_dump_seen(&table);
+			arp_table_dump(&table);
 			last_stat = now;
 		}
 
