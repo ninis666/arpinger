@@ -3,6 +3,7 @@
 # define __err_h_666__
 
 # include <stdio.h>
+# include <stdlib.h>
 # include <errno.h>
 
 # ifndef unlikely
