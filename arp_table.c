@@ -34,32 +34,46 @@ err:
 	return -1;
 }
 
-#define node_link(l, e, what) do {			\
-		(e)->what.next = NULL;			\
-		(e)->what.prev = (l)->last;		\
-		if ((l)->last != NULL)			\
-			(l)->last->what.next = (e);	\
-		else					\
-			(l)->first = (e);		\
-		(l)->last = (e);			\
+#define node_link(l, e, what) do {				\
+		struct arp_list *__l_link = (l);		\
+		struct arp_entry *__e_link = (e);		\
+								\
+		__e_link->what.next = NULL;			\
+		__e_link->what.prev = __l_link->last;		\
+		if (__l_link->last != NULL)			\
+			__l_link->last->what.next = __e_link;	\
+		else						\
+			__l_link->first = __e_link;		\
+		__l_link->last = __e_link;			\
 	} while (0)
 
 #define node_unlink(l, e, what) do {					\
-		if ((e)->what.next != NULL)				\
-			(e)->what.next->what.prev = (e)->what.prev;	\
-		else							\
-			(l)->last = (e)->what.prev;			\
+		struct arp_list *__l_unlink = (l);			\
+		struct arp_entry *__e_unlink = (e);			\
 									\
-		if ((e)->what.prev != NULL)				\
-			(e)->what.prev->what.next = (e)->what.next;	\
+		if (__e_unlink->what.next != NULL)			\
+			__e_unlink->what.next->what.prev = __e_unlink->what.prev; \
 		else							\
-			(l)->first = (e)->what.next;			\
+			__l_unlink->last = __e_unlink->what.prev;	\
 									\
-		(e)->what.next = NULL;					\
-		(e)->what.prev = NULL;					\
+		if (__e_unlink->what.prev != NULL)			\
+			__e_unlink->what.prev->what.next = __e_unlink->what.next; \
+		else							\
+			__l_unlink->first = __e_unlink->what.next;	\
+									\
+		__e_unlink->what.next = NULL;				\
+		__e_unlink->what.prev = NULL;				\
 	} while (0)
 
-#define node_is_linked(e, what) (e->what.next != NULL || e->what.prev != NULL)
+#define node_is_linked(e, what) ((e)->what.next != NULL || (e)->what.prev != NULL)
+
+#define node_try_unlink(l, e, what) do {				\
+		struct arp_list *__l_try_unlink = (l);			\
+		struct arp_entry *__e_try_unlink = (e);			\
+									\
+		if (node_is_linked(__e_try_unlink, what))		\
+			node_unlink(__l_try_unlink, __e_try_unlink, what); \
+	} while (0)
 
 static size_t hwaddr_hash(const struct arp_table *table, const uint8_t *hwaddr)
 {
@@ -124,18 +138,10 @@ err:
 
 static void entry_free(struct arp_table *table, struct arp_entry *entry)
 {
-	if (node_is_linked(entry, pool_node))
-		node_unlink(&table->pool_list, entry, pool_node);
-
-	if (node_is_linked(entry, addr_node))
-		node_unlink_addr(arp_list_addr(table, entry->addr), entry);
-
-	if (node_is_linked(entry, hwaddr_node))
-		node_unlink_hwaddr(arp_list_hwaddr(table, entry->hwaddr), entry);
-
-	if (node_is_linked(entry, seen_node))
-		node_unlink(&table->seen_list, entry, seen_node);
-
+	node_try_unlink(&table->pool_list, entry, pool_node);
+	node_try_unlink(arp_list_addr(table, entry->addr), entry, addr_node);
+	node_try_unlink(arp_list_hwaddr(table, entry->hwaddr), entry, hwaddr_node);
+	node_try_unlink(&table->seen_list, entry, seen_node);
 	free(entry);
 }
 
