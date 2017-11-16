@@ -8,8 +8,20 @@
 # include "arp_frame.h"
 # include "arp_table.h"
 
-int arp_socket(const struct arp_dev *dev, struct sockaddr_ll *daddr);
-int arp_send(int sock, struct sockaddr_ll *saddr, struct arp_frame *req, const struct in_addr from, const struct in_addr to, struct in_addr *current);
-ssize_t arp_recv(int sock, const long poll_ms, struct arp_table *table);
+struct arp_net {
+	int sock;
+	struct sockaddr_ll saddr;
+	struct arp_frame req;
+
+	struct in_addr current;
+	struct in_addr from;
+	struct in_addr to;
+
+	struct timespec last_req;
+	struct timespec last_check;
+};
+
+int arp_net_init(struct arp_net *net, const struct arp_dev *dev, const struct in_addr from, const struct in_addr to);
+int arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_delay_ms, struct arp_table *table);
 
 #endif

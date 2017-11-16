@@ -280,7 +280,7 @@ err:
 	return NULL;
 }
 
-size_t arp_table_check_expired(struct arp_table *table, const struct timespec *now, const long expired_ms)
+static size_t do_check(struct arp_table *table, const struct timespec *now, const long expired_delay_ms)
 {
 	struct arp_entry *node;
 	size_t count = 0;
@@ -291,7 +291,7 @@ size_t arp_table_check_expired(struct arp_table *table, const struct timespec *n
 		struct timespec dt;
 
 		timespec_sub(now, &node->last_seen, &dt);
-		if (timespec_to_ms(&dt) < expired_ms)
+		if (timespec_to_ms(&dt) < expired_delay_ms)
 			break;
 
 		wrn("IP %s binded to HW %02x:%02x:%02x:%02x:%02x:%02x expired since %ldms\n",
@@ -303,6 +303,24 @@ size_t arp_table_check_expired(struct arp_table *table, const struct timespec *n
 		count ++;
 
 		node = next;
+	}
+
+	return count;
+}
+
+size_t arp_table_check_expired(struct arp_table *table, const long expired_delay_ms)
+{
+	struct timespec now, dt;
+	size_t count;
+	int res;
+
+	res = clock_gettime(CLOCK_MONOTONIC, &now);
+	chk(res >= 0);
+	timespec_sub(&now, &table->last_check, &dt);
+	if (timespec_to_ms(&dt) >= expired_delay_ms) {
+		count = do_check(table, &now, expired_delay_ms);
+		arp_table_dump(table);
+		table->last_check = now;
 	}
 
 	return count;
