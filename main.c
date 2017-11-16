@@ -13,7 +13,7 @@
 #include "log.h"
 #include "time_utils.h"
 
-int arp_socket(const struct arp_dev *dev, struct sockaddr_ll *daddr)
+static int arp_socket(const struct arp_dev *dev, struct sockaddr_ll *daddr)
 {
 	int sock = -1;
 
@@ -33,6 +33,99 @@ err:
 	return sock;
 }
 
+static int arp_send(int sock, struct sockaddr_ll *saddr, struct arp_frame *req, const struct in_addr from, const struct in_addr to, struct in_addr *current)
+{
+	int ret = -1;
+
+	arp_frame_set_target_addr(req, *current);
+	dbg("ARP_REQ %s\n", inet_ntoa(arp_frame_get_target_addr(req)));
+
+	if (sendto(sock, req, sizeof req[0], 0, (struct sockaddr *)saddr, sizeof saddr[0]) <= 0) {
+		err("sendto : %m\n");
+		goto err;
+	}
+
+	current->s_addr += htonl(1);
+	if (current->s_addr > to.s_addr)
+		*current = from;
+
+	ret = 0;
+err:
+	return ret;
+}
+
+static ssize_t arp_recv(int sock, const long poll_ms, struct arp_table *table)
+{
+	ssize_t done = 0;
+	struct pollfd fds;
+	struct timespec start;
+	int res;
+
+	res = clock_gettime(CLOCK_MONOTONIC, &start);
+	chk(res >= 0);
+
+	fds.fd = sock;
+	fds.events = POLLIN | POLLERR;
+	fds.revents = 0;
+
+	res = poll(&fds, 1, poll_ms);
+	if (res < 0) {
+		err("poll : %m\n");
+		goto err;
+	}
+
+	if (res == 0)
+		goto end;
+
+	for (;;) {
+		struct timespec now;
+		struct timespec dt;
+		struct arp_frame resp;
+		ssize_t resp_len;
+
+		resp_len = recvfrom(sock, &resp, sizeof resp, MSG_DONTWAIT, NULL, 0);
+		if (resp_len < 0) {
+			if (errno != EAGAIN && errno != EWOULDBLOCK) {
+				err("recvfrom : %m\n");
+				goto err;
+			}
+
+			resp_len = 0;
+		}
+
+		if (resp_len == 0)
+			break;
+
+		res = clock_gettime(CLOCK_MONOTONIC, &now);
+		chk(res >= 0);
+
+		if ((size_t )resp_len >= sizeof resp && arp_frame_check(&resp)) {
+
+			if (is_vrb()) {
+				char *res;
+				if (arp_frame_dump(&resp, &res) > 0) {
+					vrb("ARP_RSP :\n%s\n", res);
+					free(res);
+				}
+			}
+
+			if (arp_table_add(table, arp_frame_get_source_addr(&resp), arp_frame_get_source_hwaddr(&resp), &now) == NULL)
+				goto err;
+			done ++;
+		}
+
+		timespec_sub(&now, &start, &dt);
+		if (timespec_to_ms(&dt) >= poll_ms)
+			break;
+	}
+
+end:
+	return done;
+
+err:
+	return -1;
+}
+
 int main(int ac, char **av)
 {
 	int ret = 1;
@@ -44,12 +137,12 @@ int main(int ac, char **av)
 	int sock;
 	struct sockaddr_ll saddr;
 	struct arp_frame req;
-	struct pollfd fds;
 	struct arp_table table;
 	struct in_addr daddr_from;
 	struct in_addr daddr_to;
 	long delay_ms = 1000;
 	long expire_ms;
+	long poll_ms;
 	struct in_addr current_dest;
 	struct timespec last_stat;
 	struct timespec last_req;
@@ -97,39 +190,24 @@ int main(int ac, char **av)
 		goto err;
 
 	arp_frame_req(&info, &req);
+	arp_table_init(&table, 1, 1);
 
-	fds.fd = sock;
-	fds.events = POLLIN | POLLERR;
-	fds.revents = 0;
 	memset(&last_req, 0, sizeof last_req);
 	memset(&last_stat, 0, sizeof last_stat);
 	current_dest = daddr_from;
 	expire_ms = delay_ms * (htonl(daddr_to.s_addr) - htonl(daddr_from.s_addr)) * 8; /* Enough time to discover all the network */
-
-	arp_table_init(&table, 1, 1);
+	poll_ms = (delay_ms <= 1) ? 1 : delay_ms / 2;
 
 	for (;;) {
-		struct arp_frame resp;
-		ssize_t resp_len;
 		struct timespec now, dt;
 		int ret;
 
 		ret = clock_gettime(CLOCK_MONOTONIC, &now);
 		chk(ret >= 0);
 		timespec_sub(&now, &last_req, &dt);
-		if (timespec_to_ms(&dt) >= delay_ms) { /* Convert in ms ! */
-
-			arp_frame_set_target_addr(&req, current_dest);
-			vrb("ARP_REQ %s\n", inet_ntoa(arp_frame_get_target_addr(&req)));
-
-			if (sendto(sock, &req, sizeof req, 0, (struct sockaddr *)&saddr, sizeof saddr) <= 0) {
-				err("sendto : %m\n");
+		if (timespec_to_ms(&dt) >= delay_ms) {
+			if (arp_send(sock, &saddr, &req, daddr_from, daddr_to, &current_dest) < 0)
 				goto err;
-			}
-
-			current_dest.s_addr += htonl(1);
-			if (current_dest.s_addr > daddr_to.s_addr)
-				current_dest = daddr_from;
 			last_req = now;
 		}
 
@@ -142,33 +220,8 @@ int main(int ac, char **av)
 			last_stat = now;
 		}
 
-		i = poll(&fds, 1, (delay_ms <= 1) ? 1 : delay_ms / 2);
-		if (i < 0) {
-			err("poll : %m\n");
+		if (arp_recv(sock, poll_ms, &table) < 0)
 			goto err;
-		}
-
-		if (i > 0) {
-
-			resp_len = recvfrom(sock, &resp, sizeof resp, MSG_DONTWAIT, NULL, 0);
-			if (resp_len < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-				err("recvfrom : %m\n");
-				goto err;
-			}
-
-			if ((size_t )resp_len >= sizeof resp && arp_frame_check(&resp)) {
-
-				if (is_vrb()) {
-					char *res;
-					if (arp_frame_dump(&resp, &res) > 0) {
-						vrb("ARP_RSP :\n%s\n", res);
-						free(res);
-					}
-				}
-
-				arp_table_add(&table, arp_frame_get_source_addr(&resp), arp_frame_get_source_hwaddr(&resp), &now);
-			}
-		}
 	}
 
 	arp_dev_deinit(&info);

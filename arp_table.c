@@ -265,7 +265,7 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 		chk(addr_node == hwaddr_node);
 		entry = addr_node;
 
-		vrb("IP %s still binded to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
+		dbg("IP %s still binded to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
 			inet_ntoa(entry->addr),
 			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
 
