@@ -65,13 +65,13 @@ err:
 		__e_unlink->what.prev = NULL;				\
 	} while (0)
 
-#define node_is_linked(e, what) ((e)->what.next != NULL || (e)->what.prev != NULL)
+#define node_is_linked(l, e, what) ((l)->first == (e) || (l)->last == (e) || (e)->what.next != NULL || (e)->what.prev != NULL)
 
 #define node_try_unlink(l, e, what) do {				\
 		struct arp_list *__l_try_unlink = (l);			\
 		struct arp_entry *__e_try_unlink = (e);			\
 									\
-		if (node_is_linked(__e_try_unlink, what))		\
+		if (node_is_linked(__l_try_unlink, __e_try_unlink, what)) \
 			node_unlink(__l_try_unlink, __e_try_unlink, what); \
 	} while (0)
 
@@ -115,7 +115,7 @@ static void node_unlink_hwaddr(struct arp_list *list, struct arp_entry *entry)
 	node_unlink(list, entry, hwaddr_node);
 }
 
-static struct arp_entry *entry_alloc(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now)
+static struct arp_entry *entry_alloc(const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now)
 {
 	struct arp_entry *entry = NULL;
 
@@ -129,9 +129,6 @@ static struct arp_entry *entry_alloc(struct arp_table *table, const struct in_ad
 	memcpy(&entry->hwaddr, hwaddr, sizeof entry->hwaddr);
 	entry->first_seen = *now;
 	entry->last_seen = *now;
-
-	node_link(&table->pool_list, entry, pool_node);
-
 err:
 	return entry;
 }
@@ -193,10 +190,11 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 
 	if (addr_node == NULL && hwaddr_node == NULL) {
 
-		entry = entry_alloc(table, addr, hwaddr, now);
+		entry = entry_alloc(addr, hwaddr, now);
 		if (entry == NULL)
 			goto err;
 
+		node_link(&table->pool_list, entry, pool_node);
 		node_link_addr(addr_list, entry);
 		node_link_hwaddr(hwaddr_list, entry);
 
