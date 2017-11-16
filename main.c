@@ -71,7 +71,7 @@ int main(int ac, char **av)
 	if (arp_table_init(&table, 1, 1) < 0)
 		goto err;
 
-	expire_ms = delay_ms * (htonl(daddr_to.s_addr) - htonl(daddr_from.s_addr)) * 8; /* Enough time to discover all the network */
+	expire_ms = delay_ms * (htonl(net.to.s_addr) - htonl(net.from.s_addr)) * 1; /* Enough time to discover all the network */
 	poll_ms = (delay_ms <= 1) ? 1 : delay_ms / 2;
 
 	for (;;) {

@@ -6,33 +6,20 @@
 #include "log.h"
 #include "time_utils.h"
 
-int arp_socket(const struct arp_dev *dev, struct sockaddr_ll *daddr)
-{
-	int sock = -1;
-
-	sock = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
-	if (sock < 0) {
-		err("socket SOCK_RAW : %m\n");
-		goto err;
-	}
-
-	memset(daddr, 0, sizeof daddr[0]);
-	daddr->sll_ifindex = dev->index;
-	daddr->sll_family = AF_PACKET;
-	memcpy(daddr->sll_addr, dev->hwaddr, sizeof dev->hwaddr);
-	daddr->sll_halen = sizeof dev->hwaddr;
-
-err:
-	return sock;
-}
-
 int arp_net_init(struct arp_net *net, const struct arp_dev *dev, const struct in_addr from, const struct in_addr to)
 {
 	memset(net, 0, sizeof net[0]);
 
-	net->sock = arp_socket(dev, &net->saddr);
-	if (net->sock < 0)
+	net->sock = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
+	if (net->sock < 0) {
+		err("socket SOCK_RAW : %m\n");
 		goto err;
+	}
+
+	net->saddr.sll_ifindex = dev->index;
+	net->saddr.sll_family = AF_PACKET;
+	memcpy(net->saddr.sll_addr, dev->hwaddr, sizeof dev->hwaddr);
+	net->saddr.sll_halen = sizeof dev->hwaddr;
 
 	if (from.s_addr == 0)
 		net->from.s_addr = (dev->addr.s_addr & dev->netmask.s_addr) + htonl(1);
@@ -43,6 +30,13 @@ int arp_net_init(struct arp_net *net, const struct arp_dev *dev, const struct in
 		net->to.s_addr = dev->broadcast.s_addr - htonl(1);
 	else
 		net->to = to;
+
+	if (htonl(net->to.s_addr) < htonl(net->from.s_addr)) {
+		const struct in_addr tmp = net->to;
+
+		net->to = net->from;
+		net->from = tmp;
+	}
 
 	arp_frame_req(dev, &net->req);
 
