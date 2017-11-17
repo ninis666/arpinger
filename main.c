@@ -4,6 +4,7 @@
 #include <net/if_arp.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <limits.h>
 
 #include "arp_dev.h"
 #include "arp_frame.h"
@@ -29,12 +30,13 @@ int main(int ac, char **av)
 	const char *dev = (ac >= 2) ? av[1] : "eth0";
 	const char *from = (ac >= 3) ? av[2] : NULL;
 	const char *to = (ac >= 4) ? av[3] : NULL;
+	const char *req_delay_str = (ac >= 5) ? av[4] : NULL;
 	int i;
 	struct arp_dev info;
 	struct arp_table table;
 	struct in_addr daddr_from;
 	struct in_addr daddr_to;
-	long delay_ms = 1000;
+	long req_delay_ms;
 	long expire_ms;
 	long poll_ms;
 	struct arp_net net;
@@ -69,6 +71,24 @@ int main(int ac, char **av)
 		}
 	}
 
+	if (req_delay_str == NULL)
+		req_delay_ms = 1000;
+	else {
+
+		char *ptr;
+		long long l;
+
+		errno = 0;
+		l = strtoll(req_delay_str, &ptr, 0);
+		if (l > LONG_MAX || l < 0 || *ptr != 0 || errno != 0) {
+			err("Invalid req_delay_str : %s (%m)\n", req_delay_str);
+			abort();
+			goto usage;
+		}
+
+		req_delay_ms = (long )l;
+	}
+
 	if (is_dbg()) {
 		char *res;
 
@@ -84,18 +104,17 @@ int main(int ac, char **av)
 	if (arp_table_init(&table, 1, 1) < 0)
 		goto err;
 
-	expire_ms = 4 * delay_ms * (htonl(net.to.s_addr) - htonl(net.from.s_addr)); /* Enough time to discover all the network */
-	poll_ms = (delay_ms <= 1) ? 1 : delay_ms / 2;
+	expire_ms = 4 * ((req_delay_ms == 0) ? 1 : req_delay_ms) * (htonl(net.to.s_addr) - htonl(net.from.s_addr)); /* Enough time to discover all the network */
+	poll_ms = (req_delay_ms <= 1) ? 1 : req_delay_ms / 2;
 
 	signal(SIGHUP, sig_handler);
 
 	while (!stop_main_loop) {
 
-		if (arp_net_loop(&net, delay_ms, poll_ms, &table) < 0)
+		if (arp_net_loop(&net, req_delay_ms, poll_ms, &table) < 0)
 			goto err;
 
 		arp_table_check_expired(&table, expire_ms);
-
 
 		for (size_t idx = 0 ; sig_count > 0 && idx < sizeof sig_table / sizeof sig_table[0] ; idx++) {
 

@@ -14,7 +14,7 @@ arpinger: main.o arp_dev.o arp_frame.o arp_table.o time_utils.o arp_net.o
 	$(CC) $(LDFLAGS) $^ -o $@
 
 clean:
-	rm -f *.o *~ $(EXE) $(DEP_FILE)
+	rm -f *.o *~ $(EXE) $(DEP_FILE) cscope.out
 
 %.o: %.c Makefile
 	$(CC) $(CFLAGS) -c $< -o $@
