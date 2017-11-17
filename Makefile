@@ -1,7 +1,7 @@
 
 DEP_FILE = .$(shell pwd | sed 's|/||g').depend
 
-#ARP_CFLAGS = -DARP_DEBUG=1
+ARP_CFLAGS = -DARP_DEBUG=1
 ARP_CFLAGS += -DARP_CHECK=1
 
 EXE = arpinger

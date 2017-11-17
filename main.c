@@ -34,7 +34,7 @@ int main(int ac, char **av)
 	struct arp_table table;
 	struct in_addr daddr_from;
 	struct in_addr daddr_to;
-	long delay_ms = 100;
+	long delay_ms = 1000;
 	long expire_ms;
 	long poll_ms;
 	struct arp_net net;

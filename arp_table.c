@@ -280,17 +280,22 @@ err:
 	return NULL;
 }
 
-static size_t do_check(struct arp_table *table, const struct timespec *now, const long expired_delay_ms)
+size_t arp_table_check_expired(struct arp_table *table, const long expired_delay_ms)
 {
 	struct arp_entry *node;
+	int res;
+	struct timespec now;
 	size_t count = 0;
+
+	res = clock_gettime(CLOCK_MONOTONIC, &now);
+	chk(res >= 0);
 
 	node = table->pool_list.first;
 	while (node != NULL) {
 		struct arp_entry *next = node->pool_node.next;
 		struct timespec dt;
 
-		timespec_sub(now, &node->last_seen, &dt);
+		timespec_sub(&now, &node->last_seen, &dt);
 		if (timespec_to_ms(&dt) < expired_delay_ms)
 			break;
 
@@ -303,23 +308,6 @@ static size_t do_check(struct arp_table *table, const struct timespec *now, cons
 		count ++;
 
 		node = next;
-	}
-
-	return count;
-}
-
-size_t arp_table_check_expired(struct arp_table *table, const long expired_delay_ms)
-{
-	struct timespec now, dt;
-	size_t count;
-	int res;
-
-	res = clock_gettime(CLOCK_MONOTONIC, &now);
-	chk(res >= 0);
-	timespec_sub(&now, &table->last_check, &dt);
-	if (timespec_to_ms(&dt) >= expired_delay_ms / 2) {
-		count = do_check(table, &now, expired_delay_ms);
-		table->last_check = now;
 	}
 
 	return count;

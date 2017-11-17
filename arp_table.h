@@ -23,8 +23,6 @@ struct arp_list {
 };
 
 struct arp_table {
-	struct timespec last_check;
-
 	struct arp_list pool_list;
 
 	struct arp_list *addr_list;
