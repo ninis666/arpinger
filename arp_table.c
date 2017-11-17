@@ -9,7 +9,12 @@
 
 int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const size_t hwaddr_max_hash)
 {
+	int res;
+
 	memset(table, 0, sizeof table[0]);
+
+	res = clock_gettime(CLOCK_MONOTONIC, &table->initial_time);
+	chk(res == 0);
 
 	table->addr_list = calloc(addr_max_hash, sizeof table->addr_list[0]);
 	if (table->addr_list == NULL) {
@@ -141,14 +146,52 @@ static void entry_free(struct arp_table *table, struct arp_entry *entry)
 	free(entry);
 }
 
-void arp_table_dump(const struct arp_table *table)
+size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx)
 {
-	for (struct arp_entry *node = table->pool_list.first ; node != NULL ; node = node->pool_node.next) {
-		fprintf(stderr, "%s %02x:%02x:%02x:%02x:%02x:%02x, first = { %lds, %ldns }, last = { %lds, %ldns }\n", inet_ntoa(node->addr),
-			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5],
-			node->first_seen.tv_sec, node->first_seen.tv_nsec,
-			node->last_seen.tv_sec, node->last_seen.tv_nsec);
+	FILE *fp;
+	char *ptr = NULL;
+	size_t size = 0;
+	struct timeval now;
+	int ret;
+
+	fp = open_memstream(&ptr, &size);
+	if (fp == NULL) {
+		err("open_memstream failed : %m\n");
+		goto err;
 	}
+
+	ret = gettimeofday(&now, NULL);
+	chk(ret == 0);
+
+	for (struct arp_entry *node = table->pool_list.first ; node != NULL ; node = node->pool_node.next) {
+		struct timespec first_dt;
+		struct timespec last_dt;
+		struct timeval first;
+		struct timeval last;
+		struct tm first_tm;
+		struct tm last_tm;
+
+		timespec_sub(&node->first_seen, &table->initial_time, &first_dt);
+		timespec_sub(&node->last_seen, &table->initial_time, &last_dt);
+		timeval_sub_timespec(&now, &first_dt, &first);
+		timeval_sub_timespec(&now, &last_dt, &last);
+
+		localtime_r(&first.tv_sec, &first_tm);
+		localtime_r(&last.tv_sec, &last_tm);
+
+		fprintf(fp, "%s%16s %02x:%02x:%02x:%02x:%02x:%02x, first = %02d_%02d_%02d %02d:%02d:%02d:%03ld, last = %02d_%02d_%02d %02d:%02d:%02d:%03ld%s",
+			pfx ? pfx : "",
+			inet_ntoa(node->addr),
+			node->hwaddr[0], node->hwaddr[1], node->hwaddr[2], node->hwaddr[3], node->hwaddr[4], node->hwaddr[5],
+			1900 + first_tm.tm_year, first_tm.tm_mon + 1, first_tm.tm_mday, first_tm.tm_hour, first_tm.tm_min, first_tm.tm_sec, first.tv_usec / 1000,
+			1900 + last_tm.tm_year, last_tm.tm_mon + 1, last_tm.tm_mday, last_tm.tm_hour, last_tm.tm_min, last_tm.tm_sec,  last.tv_usec / 1000,
+			sfx ? sfx : "");
+	}
+
+	fclose(fp);
+err:
+	*res = ptr;
+	return size;
 }
 
 static struct arp_entry *node_lookup_addr(const struct arp_list *list, const struct in_addr addr)

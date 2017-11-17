@@ -23,6 +23,7 @@ struct arp_list {
 };
 
 struct arp_table {
+	struct timespec initial_time;
 	struct arp_list pool_list;
 
 	struct arp_list *addr_list;
@@ -36,6 +37,6 @@ int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const si
 struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now);
 size_t arp_table_check_expired(struct arp_table *table, const long expired_ms);
 
-void arp_table_dump(const struct arp_table *table);
+size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx);
 
 #endif

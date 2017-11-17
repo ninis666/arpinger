@@ -107,8 +107,19 @@ int main(int ac, char **av)
 					break;
 
 				case SIGHUP:
-					arp_table_dump(&table);
+				{
+					char *res = NULL;
+
+					printf("+++\n");
+					if (arp_table_dump(&table, &res, "+ ", "\n") > 0 && res != NULL) {
+						printf("%s", res);
+						free(res);
+					} else
+						printf("Empty");
+					printf("+++\n");
+
 					break;
+				}
 
 				case SIGINT:
 					stop_main_loop = 1;
