@@ -353,3 +353,18 @@ size_t arp_table_check_expired(struct arp_table *table, const long expired_delay
 
 	return count;
 }
+
+void arp_table_free(struct arp_table *table)
+{
+	for (;;) {
+		struct arp_entry *node;
+		node = table->pool_list.first;
+		if (node == NULL)
+			break;
+		entry_free(table, node);
+	}
+
+	free(table->addr_list);
+	free(table->hwaddr_list);
+	memset(table, 0, sizeof table[0]);
+}

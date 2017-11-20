@@ -1,6 +1,7 @@
 
 #include <string.h>
 #include <poll.h>
+#include <unistd.h>
 
 #include "arp_net.h"
 #include "log.h"
@@ -165,4 +166,12 @@ err:
 	return -1;
 }
 
+
+void arp_net_free(struct arp_net *net)
+{
+	if (net->sock >= 0) {
+		close(net->sock);
+		net->sock = -1;
+	}
+}
 

@@ -108,6 +108,8 @@ int main(int ac, char **av)
 	poll_ms = (req_delay_ms <= 1) ? 1 : req_delay_ms / 2;
 
 	signal(SIGHUP, sig_handler);
+	signal(SIGINT, sig_handler);
+	signal(SIGTERM, sig_handler);
 
 	while (!stop_main_loop) {
 
@@ -140,6 +142,7 @@ int main(int ac, char **av)
 					break;
 				}
 
+				case SIGTERM:
 				case SIGINT:
 					stop_main_loop = 1;
 					break;
@@ -152,6 +155,8 @@ int main(int ac, char **av)
 	}
 
 	arp_dev_deinit(&info);
+	arp_table_free(&table);
+	arp_net_free(&net);
 
 	ret = 0;
 err:
