@@ -13,7 +13,10 @@ int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const si
 
 	memset(table, 0, sizeof table[0]);
 
-	res = clock_gettime(CLOCK_MONOTONIC, &table->initial_time);
+	res = clock_gettime(CLOCK_MONOTONIC, &table->initial_clock);
+	chk(res == 0);
+
+	res = gettimeofday(&table->initial_time, NULL);
 	chk(res == 0);
 
 	table->addr_list = calloc(addr_max_hash, sizeof table->addr_list[0]);
@@ -151,17 +154,12 @@ size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx
 	FILE *fp;
 	char *ptr = NULL;
 	size_t size = 0;
-	struct timeval now;
-	int ret;
 
 	fp = open_memstream(&ptr, &size);
 	if (fp == NULL) {
 		err("open_memstream failed : %m\n");
 		goto err;
 	}
-
-	ret = gettimeofday(&now, NULL);
-	chk(ret == 0);
 
 	for (struct arp_entry *node = table->pool_list.first ; node != NULL ; node = node->pool_node.next) {
 		struct timespec first_dt;
@@ -171,10 +169,10 @@ size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx
 		struct tm first_tm;
 		struct tm last_tm;
 
-		timespec_sub(&node->first_seen, &table->initial_time, &first_dt);
-		timespec_sub(&node->last_seen, &table->initial_time, &last_dt);
-		timeval_sub_timespec(&now, &first_dt, &first);
-		timeval_sub_timespec(&now, &last_dt, &last);
+		timespec_sub(&node->first_seen, &table->initial_clock, &first_dt);
+		timespec_sub(&node->last_seen, &table->initial_clock, &last_dt);
+		timeval_add_timespec(&table->initial_time, &first_dt, &first);
+		timeval_add_timespec(&table->initial_time, &last_dt, &last);
 
 		localtime_r(&first.tv_sec, &first_tm);
 		localtime_r(&last.tv_sec, &last_tm);

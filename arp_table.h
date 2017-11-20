@@ -23,7 +23,9 @@ struct arp_list {
 };
 
 struct arp_table {
-	struct timespec initial_time;
+	struct timespec initial_clock;
+	struct timeval initial_time;
+
 	struct arp_list pool_list;
 
 	struct arp_list *addr_list;
