@@ -1,6 +1,6 @@
 
-#ifndef __list_utils_h__
-# define __list_utils_h__
+#ifndef __list_utils_h_666__
+# define __list_utils_h_666__
 
 #define node_link(l, e) do {					\
 		typeof((l)) __l_link = (l);			\

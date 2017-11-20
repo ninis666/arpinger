@@ -6,11 +6,15 @@
 #include <netinet/in.h>
 #include <time.h>
 
-struct arp_entry {
+struct arp_entry_data {
 	struct in_addr addr;
 	uint8_t hwaddr[ETH_ALEN];
 	struct timespec first_seen;
 	struct timespec last_seen;
+};
+
+struct arp_entry {
+	struct arp_entry_data data;
 	struct {
 		struct arp_entry *next;
 		struct arp_entry *prev;

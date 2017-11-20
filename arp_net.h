@@ -1,6 +1,6 @@
 
-#ifndef __arp_net_h__
-# define __arp_net_h__
+#ifndef __arp_net_h_666__
+# define __arp_net_h_666__
 
 # include <linux/if_packet.h>
 
