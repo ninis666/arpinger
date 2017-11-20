@@ -10,7 +10,7 @@ LDFLAGS = $(ARP_LDFLAGS)
 
 all: $(DEP_FILE) $(EXE)
 
-arpinger: main.o arp_dev.o arp_frame.o arp_table.o time_utils.o arp_net.o arpinger.o
+arpinger: main.o arp_dev.o arp_frame.o arp_table.o time_utils.o arp_net.o arpinger.o arp_event.o
 	$(CC) $(LDFLAGS) $^ -o $@
 
 clean:
