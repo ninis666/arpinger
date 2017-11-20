@@ -6,6 +6,7 @@
 #include "arp_table.h"
 #include "log.h"
 #include "time_utils.h"
+#include "list_utils.h"
 
 int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const size_t hwaddr_max_hash)
 {
@@ -42,47 +43,6 @@ err:
 	return -1;
 }
 
-#define node_link(l, e, what) do {				\
-		struct arp_list *__l_link = (l);		\
-		struct arp_entry *__e_link = (e);		\
-								\
-		__e_link->what.next = NULL;			\
-		__e_link->what.prev = __l_link->last;		\
-		if (__l_link->last != NULL)			\
-			__l_link->last->what.next = __e_link;	\
-		else						\
-			__l_link->first = __e_link;		\
-		__l_link->last = __e_link;			\
-	} while (0)
-
-#define node_unlink(l, e, what) do {					\
-		struct arp_list *__l_unlink = (l);			\
-		struct arp_entry *__e_unlink = (e);			\
-									\
-		if (__e_unlink->what.next != NULL)			\
-			__e_unlink->what.next->what.prev = __e_unlink->what.prev; \
-		else							\
-			__l_unlink->last = __e_unlink->what.prev;	\
-									\
-		if (__e_unlink->what.prev != NULL)			\
-			__e_unlink->what.prev->what.next = __e_unlink->what.next; \
-		else							\
-			__l_unlink->first = __e_unlink->what.next;	\
-									\
-		__e_unlink->what.next = NULL;				\
-		__e_unlink->what.prev = NULL;				\
-	} while (0)
-
-#define node_is_linked(l, e, what) ((l)->first == (e) || (l)->last == (e) || (e)->what.next != NULL || (e)->what.prev != NULL)
-
-#define node_try_unlink(l, e, what) do {				\
-		struct arp_list *__l_try_unlink = (l);			\
-		struct arp_entry *__e_try_unlink = (e);			\
-									\
-		if (node_is_linked(__l_try_unlink, __e_try_unlink, what)) \
-			node_unlink(__l_try_unlink, __e_try_unlink, what); \
-	} while (0)
-
 static size_t hwaddr_hash(const struct arp_table *table, const uint8_t *hwaddr)
 {
 	return (hwaddr[5] & 0xF) % table->hwaddr_max_hash;
@@ -103,25 +63,68 @@ static struct arp_list *arp_list_hwaddr(const struct arp_table *table, const uin
 	return &table->hwaddr_list[hwaddr_hash(table, hwaddr)];
 }
 
-static void node_link_addr(struct arp_list *list, struct arp_entry *entry)
+#define node_next(n) n->pool_node.next
+#define node_prev(n) n->pool_node.prev
+
+static void node_link_pool(struct arp_list *list, struct arp_entry *entry)
 {
-	node_link(list, entry, addr_node);
+	node_link(list, entry);
 }
 
-static void node_link_hwaddr(struct arp_list *list, struct arp_entry *entry)
+static void node_unlink_pool(struct arp_list *list, struct arp_entry *entry)
 {
-	node_link(list, entry, hwaddr_node);
+	node_unlink(list, entry);
+}
+
+static void node_try_unlink_pool(struct arp_list *list, struct arp_entry *entry)
+{
+	node_try_unlink(list, entry);
+}
+
+#undef node_next
+#undef node_prev
+
+#define node_next(n) n->addr_node.next
+#define node_prev(n) n->addr_node.prev
+
+static void node_link_addr(struct arp_list *list, struct arp_entry *entry)
+{
+	node_link(list, entry);
 }
 
 static void node_unlink_addr(struct arp_list *list, struct arp_entry *entry)
 {
-	node_unlink(list, entry, addr_node);
+	node_unlink(list, entry);
+}
+
+static void node_try_unlink_addr(struct arp_list *list, struct arp_entry *entry)
+{
+	node_try_unlink(list, entry);
+}
+
+#undef node_next
+#undef node_prev
+
+#define node_next(n) n->hwaddr_node.next
+#define node_prev(n) n->hwaddr_node.prev
+
+static void node_link_hwaddr(struct arp_list *list, struct arp_entry *entry)
+{
+	node_link(list, entry);
 }
 
 static void node_unlink_hwaddr(struct arp_list *list, struct arp_entry *entry)
 {
-	node_unlink(list, entry, hwaddr_node);
+	node_unlink(list, entry);
 }
+
+static void node_try_unlink_hwaddr(struct arp_list *list, struct arp_entry *entry)
+{
+	node_try_unlink(list, entry);
+}
+
+#undef node_next
+#undef node_prev
 
 static struct arp_entry *entry_alloc(const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now)
 {
@@ -143,9 +146,9 @@ err:
 
 static void entry_free(struct arp_table *table, struct arp_entry *entry)
 {
-	node_try_unlink(&table->pool_list, entry, pool_node);
-	node_try_unlink(arp_list_addr(table, entry->addr), entry, addr_node);
-	node_try_unlink(arp_list_hwaddr(table, entry->hwaddr), entry, hwaddr_node);
+	node_try_unlink_pool(&table->pool_list, entry);
+	node_try_unlink_addr(arp_list_addr(table, entry->addr), entry);
+	node_try_unlink_hwaddr(arp_list_hwaddr(table, entry->hwaddr), entry);
 	free(entry);
 }
 
@@ -236,7 +239,7 @@ arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr
 		if (entry == NULL)
 			goto err;
 
-		node_link(&table->pool_list, entry, pool_node);
+		node_link_pool(&table->pool_list, entry);
 		node_link_addr(addr_list, entry);
 		node_link_hwaddr(hwaddr_list, entry);
 
@@ -318,9 +321,8 @@ arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr
 	}
 
 	entry->last_seen = *now;
-
-	node_unlink(&table->pool_list, entry, pool_node);
-	node_link(&table->pool_list, entry, pool_node);
+	node_unlink_pool(&table->pool_list, entry);
+	node_link_pool(&table->pool_list, entry);
 
 	if (res != NULL)
 		*res = entry;
