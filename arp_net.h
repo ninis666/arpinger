@@ -23,7 +23,6 @@ struct arp_net {
 
 int arp_net_init(struct arp_net *net, const struct arp_dev *dev, const struct in_addr from, const struct in_addr to);
 void arp_net_free(struct arp_net *net);
-
-int arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_delay_ms, struct arp_table *table);
+ssize_t arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_delay_ms, struct arp_table *table);
 
 #endif

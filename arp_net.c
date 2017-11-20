@@ -71,7 +71,7 @@ err:
 
 static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct arp_table *table)
 {
-	ssize_t done = 0;
+	ssize_t changed = 0;
 	struct pollfd fds;
 	struct timespec start;
 	int res;
@@ -100,6 +100,7 @@ static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct ar
 		struct timespec dt;
 		struct arp_frame resp;
 		ssize_t resp_len;
+		arp_table_add_t res;
 
 		resp_len = recvfrom(net->sock, &resp, sizeof resp, MSG_DONTWAIT, NULL, 0);
 		if (resp_len < 0) {
@@ -127,9 +128,12 @@ static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct ar
 				}
 			}
 
-			if (arp_table_add(table, arp_frame_get_source_addr(&resp), arp_frame_get_source_hwaddr(&resp), &now) == NULL)
+			res = arp_table_add(table, arp_frame_get_source_addr(&resp), arp_frame_get_source_hwaddr(&resp), &now, NULL);
+			if (res < 0)
 				goto err;
-			done ++;
+
+			if (res != 0)
+				changed ++;
 		}
 
 		timespec_sub(&now, &start, &dt);
@@ -138,16 +142,17 @@ static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct ar
 	}
 
 end:
-	return done;
+	return changed;
 
 err:
 	return -1;
 }
 
-int arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_delay_ms, struct arp_table *table)
+ssize_t arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_delay_ms, struct arp_table *table)
 {
 	struct timespec now, dt;
 	int res;
+	ssize_t changed = -1;
 
 	res = clock_gettime(CLOCK_MONOTONIC, &now);
 	chk(res >= 0);
@@ -158,12 +163,9 @@ int arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_d
 		net->last_req = now;
 	}
 
-	if (arp_recv(net, poll_delay_ms, table) < 0)
-		goto err;
-
-	return 0;
+	changed = arp_recv(net, poll_delay_ms, table);
 err:
-	return -1;
+	return changed;
 }
 
 

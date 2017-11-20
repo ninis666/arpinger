@@ -216,13 +216,14 @@ static struct arp_entry *node_lookup_hwaddr(struct arp_list *list, const uint8_t
 	return node;
 }
 
-struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now)
+arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now, struct arp_entry **res)
 {
 	struct arp_list *addr_list;
 	struct arp_list *hwaddr_list;
 	struct arp_entry *addr_node;
 	struct arp_entry *hwaddr_node;
 	struct arp_entry *entry = NULL;
+	arp_table_add_t ret = arp_table_add_error;
 
 	addr_list = arp_list_addr(table, addr);
 	hwaddr_list = arp_list_hwaddr(table, hwaddr);
@@ -242,6 +243,8 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 		dbg("IP %s added to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
 			inet_ntoa(entry->addr),
 			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
+
+		ret = arp_table_add_new;
 
 	} else if (addr_node != NULL && hwaddr_node == NULL) {
 		struct arp_list *old_hwaddr_list;
@@ -270,6 +273,7 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 			inet_ntoa(entry->addr),
 			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
 
+		ret = arp_table_add_hwaddr_changed;
 
 	} else if (addr_node == NULL && hwaddr_node != NULL) {
 		struct arp_list *old_addr_list;
@@ -299,6 +303,8 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5],
 			inet_ntoa(entry->addr));
 
+		ret = arp_table_add_addr_changed;
+
 	} else {
 
 		chk(addr_node == hwaddr_node);
@@ -308,6 +314,7 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 			inet_ntoa(entry->addr),
 			entry->hwaddr[0], entry->hwaddr[1], entry->hwaddr[2], entry->hwaddr[3], entry->hwaddr[4], entry->hwaddr[5]);
 
+		ret = arp_table_add_nochange;
 	}
 
 	entry->last_seen = *now;
@@ -315,10 +322,10 @@ struct arp_entry *arp_table_add(struct arp_table *table, const struct in_addr ad
 	node_unlink(&table->pool_list, entry, pool_node);
 	node_link(&table->pool_list, entry, pool_node);
 
-	return entry;
-
+	if (res != NULL)
+		*res = entry;
 err:
-	return NULL;
+	return ret;
 }
 
 size_t arp_table_check_expired(struct arp_table *table, const long expired_delay_ms)
