@@ -63,9 +63,11 @@ static struct arp_list *arp_list_hwaddr(const struct arp_table *table, const uin
 	return &table->hwaddr_list[hwaddr_hash(table, hwaddr)];
 }
 
-#define node_next(n) n->pool_node.next
-#define node_prev(n) n->pool_node.prev
+#define node_list_first(l) (l)->first
+#define node_list_last(l) (l)->last
 
+#define node_next(n) (n)->pool_node.next
+#define node_prev(n) (n)->pool_node.prev
 static void node_link_pool(struct arp_list *list, struct arp_entry *entry)
 {
 	node_link(list, entry);
@@ -168,7 +170,8 @@ size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx
 		goto err;
 	}
 
-	for (struct arp_entry *entry = table->pool_list.first ; entry != NULL ; entry = entry->pool_node.next) {
+#define node_next(n) (n)->pool_node.next
+	for (struct arp_entry *entry = node_list_first(&table->pool_list) ; entry != NULL ; entry = node_next(entry)) {
 		struct arp_entry_data *data = &entry->data;
 		struct timespec first_dt;
 		struct timespec last_dt;
@@ -193,6 +196,7 @@ size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx
 			1900 + last_tm.tm_year, last_tm.tm_mon + 1, last_tm.tm_mday, last_tm.tm_hour, last_tm.tm_min, last_tm.tm_sec,  last.tv_usec / 1000,
 			sfx ? sfx : "");
 	}
+#undef node_next
 
 	fclose(fp);
 err:
@@ -202,26 +206,26 @@ err:
 
 static struct arp_entry *node_lookup_addr(const struct arp_list *list, const struct in_addr addr)
 {
-	struct arp_entry *entry;
-
-	for (entry = list->first ; entry != NULL ; entry = entry->addr_node.next) {
+#define node_next(n) (n)->addr_node.next
+	for (struct arp_entry *entry = node_list_first(list) ; entry != NULL ; entry = node_next(entry)) {
 		if (entry->data.addr.s_addr == addr.s_addr)
-			break;
+			return entry;
 	}
+#undef node_next
 
-	return entry;
+	return NULL;
 }
 
 static struct arp_entry *node_lookup_hwaddr(struct arp_list *list, const uint8_t *hwaddr)
 {
-	struct arp_entry *entry;
-
-	for (entry = list->first ; entry != NULL ; entry = entry->hwaddr_node.next) {
+#define node_next(n) (n)->hwaddr_node.next
+	for (struct arp_entry *entry = node_list_first(list) ; entry != NULL ; entry = node_next(entry)) {
 		if (memcmp(entry->data.hwaddr, hwaddr, sizeof entry->data.hwaddr) == 0)
-			break;
+			return entry;
 	}
+#undef node_next
 
-	return entry;
+	return NULL;
 }
 
 arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now, struct arp_entry **res)
@@ -239,6 +243,7 @@ arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr
 	hwaddr_node = node_lookup_hwaddr(hwaddr_list, hwaddr);
 
 	if (addr_node == NULL && hwaddr_node == NULL) {
+		struct arp_entry_data *data;
 
 		entry = entry_alloc(addr, hwaddr, now);
 		if (entry == NULL)
@@ -248,9 +253,11 @@ arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr
 		node_link_addr(addr_list, entry);
 		node_link_hwaddr(hwaddr_list, entry);
 
+		data = &entry->data;
+
 		dbg("IP %s added to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
-			inet_ntoa(entry->data.addr),
-			entry->data.hwaddr[0], entry->data.hwaddr[1], entry->data.hwaddr[2], entry->data.hwaddr[3], entry->data.hwaddr[4], entry->data.hwaddr[5]);
+			inet_ntoa(data->addr),
+			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5]);
 
 		ret = arp_table_add_new;
 
@@ -351,9 +358,10 @@ size_t arp_table_check_expired(struct arp_table *table, const long expired_delay
 	res = clock_gettime(CLOCK_MONOTONIC, &now);
 	chk(res >= 0);
 
-	entry = table->pool_list.first;
+#define node_next(n) (n)->pool_node.next
+	entry = node_list_first(&table->pool_list);
 	while (entry != NULL) {
-		struct arp_entry *next = entry->pool_node.next;
+		struct arp_entry *next = node_next(entry);
 		struct arp_entry_data *data = &entry->data;
 		struct timespec dt;
 
@@ -371,6 +379,7 @@ size_t arp_table_check_expired(struct arp_table *table, const long expired_delay
 
 		entry = next;
 	}
+#undef node_next
 
 	return count;
 }
@@ -378,8 +387,7 @@ size_t arp_table_check_expired(struct arp_table *table, const long expired_delay
 void arp_table_free(struct arp_table *table)
 {
 	for (;;) {
-		struct arp_entry *node;
-		node = table->pool_list.first;
+		struct arp_entry *node = node_list_first(&table->pool_list);
 		if (node == NULL)
 			break;
 		entry_free(table, node);

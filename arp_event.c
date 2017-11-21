@@ -29,6 +29,9 @@ err:
 	return entry;
 }
 
+#define node_list_first(l) l->first
+#define node_list_last(l) l->last
+
 #define node_next(n) n->next
 #define node_prev(n) n->prev
 
