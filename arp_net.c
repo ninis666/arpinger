@@ -69,7 +69,7 @@ err:
 	return -1;
 }
 
-static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct arp_table *table)
+static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct arp_table *table, struct arp_event_list *event)
 {
 	ssize_t changed = 0;
 	struct pollfd fds;
@@ -128,7 +128,7 @@ static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct ar
 				}
 			}
 
-			res = arp_table_add(table, arp_frame_get_source_addr(&resp), arp_frame_get_source_hwaddr(&resp), &now, NULL);
+			res = arp_table_add(table, arp_frame_get_source_addr(&resp), arp_frame_get_source_hwaddr(&resp), &now, event);
 			if (res < 0)
 				goto err;
 
@@ -148,7 +148,7 @@ err:
 	return -1;
 }
 
-ssize_t arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_delay_ms, struct arp_table *table)
+ssize_t arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_delay_ms, struct arp_table *table, struct arp_event_list *event)
 {
 	struct timespec now, dt;
 	int res;
@@ -163,7 +163,7 @@ ssize_t arp_net_loop(struct arp_net *net, const long req_delay_ms, const long po
 		net->last_req = now;
 	}
 
-	changed = arp_recv(net, poll_delay_ms, table);
+	changed = arp_recv(net, poll_delay_ms, table, event);
 err:
 	return changed;
 }

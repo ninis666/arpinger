@@ -39,6 +39,8 @@ struct arp_table {
 	size_t hwaddr_max_hash;
 };
 
+#include "arp_event.h"
+
 int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const size_t hwaddr_max_hash);
 void arp_table_free(struct arp_table *table);
 
@@ -50,9 +52,11 @@ typedef enum {
 	arp_table_add_hwaddr_changed,
 } arp_table_add_t;
 
-arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now, struct arp_entry **res);
+struct arp_event_list;
+arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now, struct arp_event_list *event);
 size_t arp_table_check_expired(struct arp_table *table, const long expired_ms);
 
 size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx);
+
 
 #endif

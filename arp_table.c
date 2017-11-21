@@ -228,7 +228,7 @@ static struct arp_entry *node_lookup_hwaddr(struct arp_list *list, const uint8_t
 	return NULL;
 }
 
-arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now, struct arp_entry **res)
+arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now, struct arp_event_list *event)
 {
 	struct arp_list *addr_list;
 	struct arp_list *hwaddr_list;
@@ -236,6 +236,9 @@ arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr
 	struct arp_entry *hwaddr_node;
 	struct arp_entry *entry = NULL;
 	arp_table_add_t ret = arp_table_add_error;
+	struct arp_entry_data old_data;
+	struct arp_entry_data *old_data_ptr = NULL;
+	struct arp_entry_data *new_data_ptr = NULL;
 
 	addr_list = arp_list_addr(table, addr);
 	hwaddr_list = arp_list_hwaddr(table, hwaddr);
@@ -243,7 +246,6 @@ arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr
 	hwaddr_node = node_lookup_hwaddr(hwaddr_list, hwaddr);
 
 	if (addr_node == NULL && hwaddr_node == NULL) {
-		struct arp_entry_data *data;
 
 		entry = entry_alloc(addr, hwaddr, now);
 		if (entry == NULL)
@@ -253,55 +255,59 @@ arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr
 		node_link_addr(addr_list, entry);
 		node_link_hwaddr(hwaddr_list, entry);
 
-		data = &entry->data;
+		new_data_ptr = &entry->data;
 
 		dbg("IP %s added to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
-			inet_ntoa(data->addr),
-			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5]);
+			inet_ntoa(new_data_ptr->addr),
+			new_data_ptr->hwaddr[0], new_data_ptr->hwaddr[1], new_data_ptr->hwaddr[2], new_data_ptr->hwaddr[3], new_data_ptr->hwaddr[4], new_data_ptr->hwaddr[5]);
 
 		ret = arp_table_add_new;
 
 	} else if (addr_node != NULL && hwaddr_node == NULL) {
 		struct arp_list *old_hwaddr_list;
 		struct arp_entry *old_hwaddr_node;
-		struct arp_entry_data *data;
 
 		entry = addr_node;
-		data = &entry->data;
+		new_data_ptr = &entry->data;
 
 		wrn("HW %02x:%02x:%02x:%02x:%02x:%02x stolled IP %s (previously holded by HW %02x:%02x:%02x:%02x:%02x:%02x)\n",
 			hwaddr[0], hwaddr[1], hwaddr[2], hwaddr[3], hwaddr[4], hwaddr[5],
 			inet_ntoa(addr),
-			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5]);
+			new_data_ptr->hwaddr[0], new_data_ptr->hwaddr[1], new_data_ptr->hwaddr[2], new_data_ptr->hwaddr[3], new_data_ptr->hwaddr[4], new_data_ptr->hwaddr[5]);
 
 		/*
 		 * Add a new hwaddr with the addr entry and remove the old one
 		 */
 
-		old_hwaddr_list = &table->hwaddr_list[hwaddr_hash(table, data->hwaddr)];
-		old_hwaddr_node = node_lookup_hwaddr(old_hwaddr_list, data->hwaddr);
+		old_hwaddr_list = arp_list_hwaddr(table, new_data_ptr->hwaddr);
+		old_hwaddr_node = node_lookup_hwaddr(old_hwaddr_list, new_data_ptr->hwaddr);
 		chk(old_hwaddr_node == entry);
+
+		if (event != NULL) {
+			old_data = *new_data_ptr;
+			old_data_ptr = &old_data;
+		}
+		memcpy(new_data_ptr->hwaddr, hwaddr, sizeof new_data_ptr->hwaddr);
 
 		node_unlink_hwaddr(old_hwaddr_list, old_hwaddr_node);
 		node_link_hwaddr(hwaddr_list, entry);
-		memcpy(data->hwaddr, hwaddr, sizeof data->hwaddr);
+
 
 		dbg("IP %s updated to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
-			inet_ntoa(data->addr),
-			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5]);
+			inet_ntoa(new_data_ptr->addr),
+			new_data_ptr->hwaddr[0], new_data_ptr->hwaddr[1], new_data_ptr->hwaddr[2], new_data_ptr->hwaddr[3], new_data_ptr->hwaddr[4], new_data_ptr->hwaddr[5]);
 
 		ret = arp_table_add_hwaddr_changed;
 
 	} else if (addr_node == NULL && hwaddr_node != NULL) {
 		struct arp_list *old_addr_list;
 		struct arp_entry *old_addr_node;
-		struct arp_entry_data *data;
 		char tmp[sizeof "xxx.xxx.xxx.xxx"];
 
 		entry = hwaddr_node;
-		data = &entry->data;
+		new_data_ptr = &entry->data;
 
-		snprintf(tmp, sizeof tmp, "%s", inet_ntoa(data->addr));
+		snprintf(tmp, sizeof tmp, "%s", inet_ntoa(new_data_ptr->addr));
 		wrn("IP %s stolled HW %02x:%02x:%02x:%02x:%02x:%02x (previously holded by IP %s)\n",
 			inet_ntoa(addr),
 			hwaddr[0], hwaddr[1], hwaddr[2], hwaddr[3], hwaddr[4], hwaddr[5],
@@ -310,40 +316,51 @@ arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr
 		/*
 		 * Add a new addr with the hwaddr entry and remove the old one
 		 */
-		old_addr_list = &table->addr_list[addr_hash(table, data->addr)];
-		old_addr_node = node_lookup_addr(old_addr_list, data->addr);
+		old_addr_list = arp_list_addr(table, new_data_ptr->addr);
+		old_addr_node = node_lookup_addr(old_addr_list, new_data_ptr->addr);
 		chk(old_addr_node == entry);
+
+		if (event != NULL) {
+			old_data = *new_data_ptr;
+			old_data_ptr = &old_data;
+		}
+		new_data_ptr->addr = addr;
 
 		node_unlink_addr(old_addr_list, old_addr_node);
 		node_link_addr(addr_list, entry);
-		data->addr = addr;
 
 		dbg("HW %02x:%02x:%02x:%02x:%02x:%02x updated to IP %s\n",
-			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5],
-			inet_ntoa(data->addr));
+			new_data_ptr->hwaddr[0], new_data_ptr->hwaddr[1], new_data_ptr->hwaddr[2], new_data_ptr->hwaddr[3], new_data_ptr->hwaddr[4], new_data_ptr->hwaddr[5],
+			inet_ntoa(new_data_ptr->addr));
 
 		ret = arp_table_add_addr_changed;
 
 	} else {
-		struct arp_entry_data *data;
-
 		chk(addr_node == hwaddr_node);
 		entry = addr_node;
-		data = &entry->data;
+		new_data_ptr = &entry->data;
+		old_data_ptr = new_data_ptr;
 
 		dbg("IP %s still binded to HW %02x:%02x:%02x:%02x:%02x:%02x\n",
-			inet_ntoa(data->addr),
-			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5]);
+			inet_ntoa(new_data_ptr->addr),
+			new_data_ptr->hwaddr[0], new_data_ptr->hwaddr[1], new_data_ptr->hwaddr[2], new_data_ptr->hwaddr[3], new_data_ptr->hwaddr[4], new_data_ptr->hwaddr[5]);
 
 		ret = arp_table_add_nochange;
 	}
 
-	entry->data.last_seen = *now;
+	chk(new_data_ptr != NULL);
+
+	new_data_ptr->last_seen = *now;
 	node_unlink_pool(&table->pool_list, entry);
 	node_link_pool(&table->pool_list, entry);
 
-	if (res != NULL)
-		*res = entry;
+	if (event != NULL && old_data_ptr != new_data_ptr) {
+		if (arp_event_list_add(event, old_data_ptr, new_data_ptr) == NULL) {
+			ret = arp_table_add_error;
+			goto err;
+		}
+	}
+
 err:
 	return ret;
 }

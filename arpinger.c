@@ -4,7 +4,7 @@
 #include "log.h"
 #include "arpinger.h"
 
-int arpinger_init(struct arpinger *arp, const char *dev, const char *from, const char *to, const long req_delay_ms, const long max_lost)
+int arpinger_init(struct arpinger *arp, const char *dev, const char *from, const char *to, const long req_delay_ms, const long max_lost, const size_t max_event)
 {
 	struct in_addr addr_from;
 	struct in_addr addr_to;
@@ -41,6 +41,7 @@ int arpinger_init(struct arpinger *arp, const char *dev, const char *from, const
 	arp->expire_ms = max_lost * ((req_delay_ms == 0) ? 1 : req_delay_ms) * (htonl(arp->net.to.s_addr) - htonl(arp->net.from.s_addr)); /* Enough time to discover all the network */
 	arp->poll_ms = (req_delay_ms <= 1) ? 1 : req_delay_ms / 2;
 	arp->req_delay_ms = req_delay_ms;
+	arp_event_list_init(&arp->event, max_event);
 	return 0;
 
 free_net_err:
@@ -55,7 +56,7 @@ ssize_t arpinger_loop(struct arpinger *arp)
 {
 	int changed;
 
-	changed = arp_net_loop(&arp->net, arp->req_delay_ms, arp->poll_ms, &arp->table);
+	changed = arp_net_loop(&arp->net, arp->req_delay_ms, arp->poll_ms, &arp->table, &arp->event);
 	if (changed < 0)
 		goto err;
 
@@ -71,4 +72,5 @@ void arpinger_free(struct arpinger *arp)
 	arp_net_free(&arp->net);
 	arp_dev_deinit(&arp->dev);
 	arp_table_free(&arp->table);
+	arp_event_list_free(&arp->event);
 }

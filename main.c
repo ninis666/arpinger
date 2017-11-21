@@ -59,7 +59,7 @@ int main(int ac, char **av)
 		req_delay_ms = (long )l;
 	}
 
-	if (arpinger_init(&arpinger, dev, from, to, req_delay_ms, 4) < 0)
+	if (arpinger_init(&arpinger, dev, from, to, req_delay_ms, 4, 16) < 0)
 		goto err;
 
 	signal(SIGHUP, sig_handler);

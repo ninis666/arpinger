@@ -19,5 +19,9 @@ struct arp_event_list {
 };
 
 void arp_event_list_init(struct arp_event_list *list, const size_t event_max);
+void arp_event_list_free(struct arp_event_list *list);
+
+int arp_event_list_get(struct arp_event_list *list, struct arp_entry_data *old, struct arp_entry_data *current);
+struct arp_event_entry *arp_event_list_add(struct arp_event_list *list, const struct arp_entry_data *old, const struct arp_entry_data *current);
 
 #endif

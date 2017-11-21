@@ -12,6 +12,16 @@ void arp_event_list_init(struct arp_event_list *list, const size_t event_max)
 	list->event_max = event_max;
 }
 
+void arp_event_list_free(struct arp_event_list *list)
+{
+	for (;;) {
+		if (arp_event_list_get(list, NULL, NULL) == 0)
+			break;
+	}
+
+	memset(list, 0, sizeof list[0]);
+}
+
 static struct arp_event_entry *event_entry_alloc(const struct arp_entry_data *old, const struct arp_entry_data *current)
 {
 	struct arp_event_entry *entry;
@@ -22,8 +32,11 @@ static struct arp_event_entry *event_entry_alloc(const struct arp_entry_data *ol
 		goto err;
 	}
 
-	entry->old_data = *old;
-	entry->current_data = *current;
+	if (old != NULL)
+		entry->old_data = *old;
+
+	if (current != NULL)
+		entry->current_data = *current;
 
 err:
 	return entry;
