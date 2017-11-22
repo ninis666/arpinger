@@ -6,9 +6,13 @@
 #include <netinet/in.h>
 #include <time.h>
 
-struct arp_entry_data {
+struct arp_entry_net_info {
 	struct in_addr addr;
 	uint8_t hwaddr[ETH_ALEN];
+};
+
+struct arp_entry_data {
+	struct arp_entry_net_info info;
 	struct timespec first_seen;
 	struct timespec last_seen;
 };
@@ -54,9 +58,9 @@ typedef enum {
 
 struct arp_event_list;
 arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now, struct arp_event_list *event);
-size_t arp_table_check_expired(struct arp_table *table, const long expired_ms);
+int arp_table_check_expired(struct arp_table *table, const long expired_delay_ms, struct arp_event_list *event);
 
 size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx);
-
+void arp_table_get_timeval(const struct arp_table *table, const struct timespec *ts, struct timeval *tv);
 
 #endif

@@ -4,6 +4,7 @@
 
 # include <time.h>
 # include <sys/time.h>
+# include "log.h"
 
 void timespec_set(struct timespec *ts, const time_t sec, const long nsec);
 void timeval_set(struct timeval *tv, const time_t sec, const suseconds_t usec);
@@ -15,5 +16,10 @@ void timeval_set(struct timeval *tv, const time_t sec, const suseconds_t usec);
 # define timeval_add_timespec(a, b, res) timeval_set((res), (a)->tv_sec + (b)->tv_sec, (a)->tv_usec + ((b)->tv_nsec / 1000))
 # define timeval_sub_timespec(a, b, res) timeval_set((res), (a)->tv_sec - (b)->tv_sec, (a)->tv_usec - ((b)->tv_nsec / 1000))
 
+# define timespec_now(res) do {						\
+		int __timespec_now_res;					\
+		__timespec_now_res = clock_gettime(CLOCK_MONOTONIC, res); \
+		chk(__timespec_now_res == 0);				\
+	} while (0)							\
 
 #endif

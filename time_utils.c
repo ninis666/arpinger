@@ -1,4 +1,5 @@
 
+#include <stdio.h>
 #include "time_utils.h"
 
 void timespec_set(struct timespec *ts, const time_t sec, const long nsec)
