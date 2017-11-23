@@ -15,7 +15,7 @@ void arp_event_list_init(struct arp_event_list *list, const size_t event_max)
 void arp_event_list_free(struct arp_event_list *list)
 {
 	for (;;) {
-		if (arp_event_list_get(list, NULL, NULL) == 0)
+		if (arp_event_list_get(list, NULL) == 0)
 			break;
 	}
 
@@ -32,11 +32,15 @@ static struct arp_event_entry *event_entry_alloc(const struct arp_entry_data *ol
 		goto err;
 	}
 
-	if (old != NULL)
-		entry->old_data = *old;
+	if (old != NULL) {
+		entry->data.old = *old;
+		entry->data.old_flags |= arp_event_entry_data_flag_present;
+	}
 
-	if (current != NULL)
-		entry->current_data = *current;
+	if (current != NULL) {
+		entry->data.current = *current;
+		entry->data.current_flags |= arp_event_entry_data_flag_present;
+	}
 
 err:
 	return entry;
@@ -87,17 +91,15 @@ err:
 	return entry;
 }
 
-int arp_event_list_get(struct arp_event_list *list, struct arp_entry_data *old, struct arp_entry_data *current)
+int arp_event_list_get(struct arp_event_list *list, struct arp_event_entry_data *res)
 {
 	struct arp_event_entry *entry;
 	int ret = 0;
 
 	entry = list->first;
 	if (entry != NULL) {
-		if (old != NULL)
-			*old = entry->old_data;
-		if (current != NULL)
-			*current = entry->current_data;
+		if (res != NULL)
+			*res = entry->data;
 
 		chk(list->event_count > 0);
 		list->event_count --;

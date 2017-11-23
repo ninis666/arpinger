@@ -67,26 +67,32 @@ int main(int ac, char **av)
 	signal(SIGTERM, sig_handler);
 
 	while (!stop_main_loop) {
-		ssize_t changed;
+		struct arp_event_entry_data event;
 
-		changed = arpinger_loop(&arpinger);
-		if (changed < 0)
+		if (arpinger_loop(&arpinger) < 0)
 			goto err;
 
-		if (changed > 0) {
-			char *res = NULL;
+		switch (arpinger_event(&arpinger, &event)) {
+		default:
+			chk(0);
+			break;
 
-			printf("+++\n");
+		case arpinger_event_status_none:
+			break;
 
-			printf("+ Table changed\n");
-			if (arp_table_dump(&arpinger.table, &res, "+ ", "\n", NULL, NULL) > 0 && res != NULL) {
-				printf("%s", res);
-				free(res);
-			} else
-				printf("Empty");
-			printf("+++\n");
+		case arpinger_event_status_changed:
+			arp_entry_dump(stdout, &event.old, "Changed from ", NULL, NULL, NULL);
+			arp_entry_dump(stdout, &event.current, " to ", "\n", NULL, NULL);
+			break;
+
+		case arpinger_event_status_new:
+			arp_entry_dump(stdout, &event.current, "New entry ", "\n", NULL, NULL);
+			break;
+
+		case arpinger_event_status_lost:
+			printf("Lost !\n");
+			break;
 		}
-
 
 		for (size_t idx = 0 ; sig_count > 0 && idx < sizeof sig_table / sizeof sig_table[0] ; idx++) {
 

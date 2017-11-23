@@ -60,11 +60,30 @@ ssize_t arpinger_loop(struct arpinger *arp)
 	if (changed < 0)
 		goto err;
 
-	if (arp_table_check_expired(&arp->table, arp->expire_ms) != 0)
+	if (arp_table_check_expired(&arp->table, arp->expire_ms, &arp->event) != 0)
 		changed ++;
 
 err:
 	return changed;
+}
+
+arpinger_event_status_t arpinger_event(struct arpinger *arp, struct arp_event_entry_data *res)
+{
+	arpinger_event_status_t ret = arpinger_event_status_none;
+
+	if (arp_event_list_get(&arp->event, res) <= 0)
+		goto end;
+
+	if ((res->old_flags & arp_event_entry_data_flag_present) != 0 && (res->current_flags & arp_event_entry_data_flag_present) != 0)
+		ret = arpinger_event_status_changed;
+	else if ((res->old_flags & arp_event_entry_data_flag_present) == 0 && (res->current_flags & arp_event_entry_data_flag_present) != 0)
+		ret = arpinger_event_status_new;
+	else if ((res->old_flags & arp_event_entry_data_flag_present) != 0 && (res->current_flags & arp_event_entry_data_flag_present) == 0)
+		ret = arpinger_event_status_lost;
+	else
+		chk(0);
+end:
+	return ret;
 }
 
 void arpinger_free(struct arpinger *arp)

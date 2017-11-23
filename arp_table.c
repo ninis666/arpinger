@@ -150,50 +150,12 @@ static void entry_free(struct arp_table *table, struct arp_entry *entry)
 	free(entry);
 }
 
-void arp_entry_get_time(const struct arp_entry_data *data, const struct timeval *now_tv, const struct timespec *now_ts, struct timeval *first, struct timeval *last)
+void arp_entry_get_time(const struct arp_entry_data *data, const struct timeval *now_tv_ptr, const struct timespec *now_ts_ptr, struct timeval *first, struct timeval *last)
 {
 	struct timespec first_dt;
 	struct timespec last_dt;
-
-	timespec_sub(now_ts, &data->first_seen, &first_dt);
-	timespec_sub(now_ts, &data->last_seen, &last_dt);
-	timeval_sub_timespec(now_tv, &first_dt, first);
-	timeval_sub_timespec(now_tv, &last_dt, last);
-}
-
-int arp_entry_dump(FILE *fp, const struct arp_entry_data *data, const char *pfx, const char *sfx, const struct timeval *now_tv_ptr, const struct timespec *now_ts_ptr)
-{
-	struct timeval first;
-	struct timeval last;
-	struct tm first_tm;
-	struct tm last_tm;
-
-	arp_entry_get_time(data, now_tv_ptr, now_ts_ptr, &first, &last);
-	localtime_r(&first.tv_sec, &first_tm);
-	localtime_r(&last.tv_sec, &last_tm);
-
-	return fprintf(fp, "%s%16s %02x:%02x:%02x:%02x:%02x:%02x, first = %02d_%02d_%02d %02d:%02d:%02d:%03ld, last = %02d_%02d_%02d %02d:%02d:%02d:%03ld%s",
-		pfx ? pfx : "",
-		inet_ntoa(data->addr),
-		data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5],
-		1900 + first_tm.tm_year, first_tm.tm_mon + 1, first_tm.tm_mday, first_tm.tm_hour, first_tm.tm_min, first_tm.tm_sec, first.tv_usec / 1000,
-		1900 + last_tm.tm_year, last_tm.tm_mon + 1, last_tm.tm_mday, last_tm.tm_hour, last_tm.tm_min, last_tm.tm_sec,  last.tv_usec / 1000,
-		sfx ? sfx : "");
-}
-
-size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx, const struct timeval *now_tv_ptr, const struct timespec *now_ts_ptr)
-{
-	FILE *fp;
-	char *ptr = NULL;
-	size_t size = 0;
 	struct timespec now_ts;
 	struct timeval now_tv;
-
-	fp = open_memstream(&ptr, &size);
-	if (fp == NULL) {
-		err("open_memstream failed : %m\n");
-		goto err;
-	}
 
 	if (now_ts_ptr == NULL) {
 		int i;
@@ -207,6 +169,61 @@ size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx
 		i = gettimeofday(&now_tv, NULL);
 		chk(i == 0);
 		now_tv_ptr = &now_tv;
+	}
+
+	timespec_sub(now_ts_ptr, &data->first_seen, &first_dt);
+	timespec_sub(now_ts_ptr, &data->last_seen, &last_dt);
+	timeval_sub_timespec(now_tv_ptr, &first_dt, first);
+	timeval_sub_timespec(now_tv_ptr, &last_dt, last);
+}
+
+int arp_entry_dump(FILE *fp, const struct arp_entry_data *data, const char *pfx, const char *sfx, const struct timeval *now_tv_ptr, const struct timespec *now_ts_ptr)
+{
+	struct timeval first;
+	struct timeval last;
+	struct tm first_tm;
+	int ret;
+
+	arp_entry_get_time(data, now_tv_ptr, now_ts_ptr, &first, &last);
+	localtime_r(&first.tv_sec, &first_tm);
+
+	if (memcmp(&first, &last, sizeof first) == 0) {
+
+		ret = fprintf(fp, "%s%16s %02x:%02x:%02x:%02x:%02x:%02x, first = %02d_%02d_%02d %02d:%02d:%02d:%03ld%s",
+			pfx ? pfx : "",
+			inet_ntoa(data->addr),
+			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5],
+			1900 + first_tm.tm_year, first_tm.tm_mon + 1, first_tm.tm_mday, first_tm.tm_hour, first_tm.tm_min, first_tm.tm_sec, first.tv_usec / 1000,
+			sfx ? sfx : "");
+
+
+	} else {
+		struct tm last_tm;
+
+		localtime_r(&last.tv_sec, &last_tm);
+
+		ret = fprintf(fp, "%s%16s %02x:%02x:%02x:%02x:%02x:%02x, first = %02d_%02d_%02d %02d:%02d:%02d:%03ld, last = %02d_%02d_%02d %02d:%02d:%02d:%03ld%s",
+			pfx ? pfx : "",
+			inet_ntoa(data->addr),
+			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5],
+			1900 + first_tm.tm_year, first_tm.tm_mon + 1, first_tm.tm_mday, first_tm.tm_hour, first_tm.tm_min, first_tm.tm_sec, first.tv_usec / 1000,
+			1900 + last_tm.tm_year, last_tm.tm_mon + 1, last_tm.tm_mday, last_tm.tm_hour, last_tm.tm_min, last_tm.tm_sec,  last.tv_usec / 1000,
+			sfx ? sfx : "");
+	}
+
+	return ret;
+}
+
+size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx, const struct timeval *now_tv_ptr, const struct timespec *now_ts_ptr)
+{
+	FILE *fp;
+	char *ptr = NULL;
+	size_t size = 0;
+
+	fp = open_memstream(&ptr, &size);
+	if (fp == NULL) {
+		err("open_memstream failed : %m\n");
+		goto err;
 	}
 
 #define node_next(n) (n)->pool_node.next
@@ -388,7 +405,7 @@ err:
 	return ret;
 }
 
-size_t arp_table_check_expired(struct arp_table *table, const long expired_delay_ms)
+size_t arp_table_check_expired(struct arp_table *table, const long expired_delay_ms, struct arp_event_list *event)
 {
 	struct arp_entry *entry;
 	int res;
@@ -413,6 +430,9 @@ size_t arp_table_check_expired(struct arp_table *table, const long expired_delay
 			inet_ntoa(data->addr),
 			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5],
 			timespec_to_ms(&dt));
+
+		if (event != NULL)
+			arp_event_list_add(event, data, NULL);
 
 		entry_free(table, entry);
 		count ++;
