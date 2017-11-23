@@ -27,9 +27,6 @@ struct arp_list {
 };
 
 struct arp_table {
-	struct timespec initial_clock;
-	struct timeval initial_time;
-
 	struct arp_list pool_list;
 
 	struct arp_list *addr_list;
@@ -55,8 +52,6 @@ typedef enum {
 struct arp_event_list;
 arp_table_add_t arp_table_add(struct arp_table *table, const struct in_addr addr, const uint8_t *hwaddr, const struct timespec *now, struct arp_event_list *event);
 size_t arp_table_check_expired(struct arp_table *table, const long expired_ms);
-
-size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx);
-
+size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx, const struct timeval *now_tv_ptr, const struct timespec *now_ts_ptr);
 
 #endif

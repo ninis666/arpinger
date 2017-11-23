@@ -10,15 +10,7 @@
 
 int arp_table_init(struct arp_table *table, const size_t addr_max_hash, const size_t hwaddr_max_hash)
 {
-	int res;
-
 	memset(table, 0, sizeof table[0]);
-
-	res = clock_gettime(CLOCK_MONOTONIC, &table->initial_clock);
-	chk(res == 0);
-
-	res = gettimeofday(&table->initial_time, NULL);
-	chk(res == 0);
 
 	table->addr_list = calloc(addr_max_hash, sizeof table->addr_list[0]);
 	if (table->addr_list == NULL) {
@@ -158,11 +150,44 @@ static void entry_free(struct arp_table *table, struct arp_entry *entry)
 	free(entry);
 }
 
-size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx)
+void arp_entry_get_time(const struct arp_entry_data *data, const struct timeval *now_tv, const struct timespec *now_ts, struct timeval *first, struct timeval *last)
+{
+	struct timespec first_dt;
+	struct timespec last_dt;
+
+	timespec_sub(now_ts, &data->first_seen, &first_dt);
+	timespec_sub(now_ts, &data->last_seen, &last_dt);
+	timeval_sub_timespec(now_tv, &first_dt, first);
+	timeval_sub_timespec(now_tv, &last_dt, last);
+}
+
+int arp_entry_dump(FILE *fp, const struct arp_entry_data *data, const char *pfx, const char *sfx, const struct timeval *now_tv_ptr, const struct timespec *now_ts_ptr)
+{
+	struct timeval first;
+	struct timeval last;
+	struct tm first_tm;
+	struct tm last_tm;
+
+	arp_entry_get_time(data, now_tv_ptr, now_ts_ptr, &first, &last);
+	localtime_r(&first.tv_sec, &first_tm);
+	localtime_r(&last.tv_sec, &last_tm);
+
+	return fprintf(fp, "%s%16s %02x:%02x:%02x:%02x:%02x:%02x, first = %02d_%02d_%02d %02d:%02d:%02d:%03ld, last = %02d_%02d_%02d %02d:%02d:%02d:%03ld%s",
+		pfx ? pfx : "",
+		inet_ntoa(data->addr),
+		data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5],
+		1900 + first_tm.tm_year, first_tm.tm_mon + 1, first_tm.tm_mday, first_tm.tm_hour, first_tm.tm_min, first_tm.tm_sec, first.tv_usec / 1000,
+		1900 + last_tm.tm_year, last_tm.tm_mon + 1, last_tm.tm_mday, last_tm.tm_hour, last_tm.tm_min, last_tm.tm_sec,  last.tv_usec / 1000,
+		sfx ? sfx : "");
+}
+
+size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx, const char *sfx, const struct timeval *now_tv_ptr, const struct timespec *now_ts_ptr)
 {
 	FILE *fp;
 	char *ptr = NULL;
 	size_t size = 0;
+	struct timespec now_ts;
+	struct timeval now_tv;
 
 	fp = open_memstream(&ptr, &size);
 	if (fp == NULL) {
@@ -170,34 +195,32 @@ size_t arp_table_dump(const struct arp_table *table, char **res, const char *pfx
 		goto err;
 	}
 
+	if (now_ts_ptr == NULL) {
+		int i;
+		i = clock_gettime(CLOCK_MONOTONIC, &now_ts);
+		chk(i == 0);
+		now_ts_ptr = &now_ts;
+	}
+
+	if (now_tv_ptr == NULL) {
+		int i;
+		i = gettimeofday(&now_tv, NULL);
+		chk(i == 0);
+		now_tv_ptr = &now_tv;
+	}
+
 #define node_next(n) (n)->pool_node.next
 	for (struct arp_entry *entry = node_list_first(&table->pool_list) ; entry != NULL ; entry = node_next(entry)) {
 		struct arp_entry_data *data = &entry->data;
-		struct timespec first_dt;
-		struct timespec last_dt;
-		struct timeval first;
-		struct timeval last;
-		struct tm first_tm;
-		struct tm last_tm;
 
-		timespec_sub(&data->first_seen, &table->initial_clock, &first_dt);
-		timespec_sub(&data->last_seen, &table->initial_clock, &last_dt);
-		timeval_add_timespec(&table->initial_time, &first_dt, &first);
-		timeval_add_timespec(&table->initial_time, &last_dt, &last);
-
-		localtime_r(&first.tv_sec, &first_tm);
-		localtime_r(&last.tv_sec, &last_tm);
-
-		fprintf(fp, "%s%16s %02x:%02x:%02x:%02x:%02x:%02x, first = %02d_%02d_%02d %02d:%02d:%02d:%03ld, last = %02d_%02d_%02d %02d:%02d:%02d:%03ld%s",
-			pfx ? pfx : "",
-			inet_ntoa(data->addr),
-			data->hwaddr[0], data->hwaddr[1], data->hwaddr[2], data->hwaddr[3], data->hwaddr[4], data->hwaddr[5],
-			1900 + first_tm.tm_year, first_tm.tm_mon + 1, first_tm.tm_mday, first_tm.tm_hour, first_tm.tm_min, first_tm.tm_sec, first.tv_usec / 1000,
-			1900 + last_tm.tm_year, last_tm.tm_mon + 1, last_tm.tm_mday, last_tm.tm_hour, last_tm.tm_min, last_tm.tm_sec,  last.tv_usec / 1000,
-			sfx ? sfx : "");
+		if (arp_entry_dump(fp, data, pfx, sfx, now_tv_ptr, now_ts_ptr) <= 0) {
+			err("Failed to dump : %m\n");
+			goto close_err;
+		}
 	}
 #undef node_next
 
+close_err:
 	fclose(fp);
 err:
 	*res = ptr;

@@ -79,7 +79,7 @@ int main(int ac, char **av)
 			printf("+++\n");
 
 			printf("+ Table changed\n");
-			if (arp_table_dump(&arpinger.table, &res, "+ ", "\n") > 0 && res != NULL) {
+			if (arp_table_dump(&arpinger.table, &res, "+ ", "\n", NULL, NULL) > 0 && res != NULL) {
 				printf("%s", res);
 				free(res);
 			} else
@@ -102,7 +102,7 @@ int main(int ac, char **av)
 					char *res = NULL;
 
 					printf("+++\n");
-					if (arp_table_dump(&arpinger.table, &res, "+ ", "\n") > 0 && res != NULL) {
+					if (arp_table_dump(&arpinger.table, &res, "+ ", "\n", NULL, NULL) > 0 && res != NULL) {
 						printf("%s", res);
 						free(res);
 					} else
