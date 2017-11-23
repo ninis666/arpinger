@@ -32,15 +32,11 @@ static struct arp_event_entry *event_entry_alloc(const struct arp_entry_data *ol
 		goto err;
 	}
 
-	if (old != NULL) {
-		entry->data.old = *old;
-		entry->data.flags |= arp_event_entry_data_have_old;
-	}
+	if (old != NULL)
+		entry->old_data = *old;
 
-	if (current != NULL) {
-		entry->data.current = *current;
-		entry->data.flags |= arp_event_entry_data_have_current;
-	}
+	if (current != NULL)
+		entry->current_data = *current;
 
 err:
 	return entry;
@@ -91,35 +87,17 @@ err:
 	return entry;
 }
 
-int arp_event_list_get(struct arp_event_list *list, const struct arp_table *table, struct arp_event_res *res)
+int arp_event_list_get(struct arp_event_list *list, struct arp_entry_data *old, struct arp_entry_data *current)
 {
 	struct arp_event_entry *entry;
 	int ret = 0;
 
 	entry = list->first;
 	if (entry != NULL) {
-
-		if (res != NULL) {
-
-			chk(table != NULL);
-
-			memset(res, 0, sizeof res[0]);
-
-			if ((entry->data.flags & arp_event_entry_data_have_current) != 0) {
-				res->current.info =  entry->data.current.info;
-				arp_table_get_timeval(table, &entry->data.current.first_seen, &res->current.first);
-				arp_table_get_timeval(table, &entry->data.current.last_seen, &res->current.last);
-				res->flags |= arp_event_entry_data_have_current;
-			}
-
-			if ((entry->data.flags & arp_event_entry_data_have_old) != 0) {
-				res->old.info =  entry->data.old.info;
-				arp_table_get_timeval(table, &entry->data.old.first_seen, &res->old.first);
-				arp_table_get_timeval(table, &entry->data.old.last_seen, &res->old.last);
-				res->flags |= arp_event_entry_data_have_old;
-			}
-
-		}
+		if (old != NULL)
+			*old = entry->old_data;
+		if (current != NULL)
+			*current = entry->current_data;
 
 		chk(list->event_count > 0);
 		list->event_count --;

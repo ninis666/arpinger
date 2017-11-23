@@ -21,6 +21,5 @@ struct arpinger {
 int arpinger_init(struct arpinger *arp, const char *dev, const char *from, const char *to, const long req_delay_ms, const long max_lost, const size_t max_event);
 ssize_t arpinger_loop(struct arpinger *arp);
 void arpinger_free(struct arpinger *arp);
-int arpinger_event(struct arpinger *arp, struct arp_event_res *res);
 
 #endif

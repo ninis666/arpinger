@@ -76,7 +76,8 @@ static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct ar
 	struct timespec start;
 	int res;
 
-	timespec_now(&start);
+	res = clock_gettime(CLOCK_MONOTONIC, &start);
+	chk(res >= 0);
 
 	fds.fd = net->sock;
 	fds.events = POLLIN | POLLERR;
@@ -114,7 +115,8 @@ static ssize_t arp_recv(struct arp_net *net, const long poll_delay_ms, struct ar
 		if (resp_len == 0)
 			break;
 
-		timespec_now(&now);
+		res = clock_gettime(CLOCK_MONOTONIC, &now);
+		chk(res >= 0);
 
 		if ((size_t )resp_len >= sizeof resp && arp_frame_check(&resp)) {
 
@@ -149,9 +151,11 @@ err:
 ssize_t arp_net_loop(struct arp_net *net, const long req_delay_ms, const long poll_delay_ms, struct arp_table *table, struct arp_event_list *event)
 {
 	struct timespec now, dt;
+	int res;
 	ssize_t changed = -1;
 
-	timespec_now(&now);
+	res = clock_gettime(CLOCK_MONOTONIC, &now);
+	chk(res >= 0);
 	timespec_sub(&now, &net->last_req, &dt);
 	if (timespec_to_ms(&dt) >= req_delay_ms) {
 		if (arp_send(net) < 0)

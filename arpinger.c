@@ -54,28 +54,17 @@ err:
 
 ssize_t arpinger_loop(struct arpinger *arp)
 {
-	ssize_t changed = 0;
-	ssize_t res;
-	ssize_t ret = -1;
+	int changed;
 
-	res = arp_net_loop(&arp->net, arp->req_delay_ms, arp->poll_ms, &arp->table, &arp->event);
-	if (res < 0)
+	changed = arp_net_loop(&arp->net, arp->req_delay_ms, arp->poll_ms, &arp->table, &arp->event);
+	if (changed < 0)
 		goto err;
-	changed += res;
 
-	res = arp_table_check_expired(&arp->table, arp->expire_ms, &arp->event);
-	if (res < 0)
-		goto err;
-	changed += res;
+	if (arp_table_check_expired(&arp->table, arp->expire_ms) != 0)
+		changed ++;
 
-	ret = changed;
 err:
-	return ret;
-}
-
-int arpinger_event(struct arpinger *arp, struct arp_event_res *res)
-{
-	return arp_event_list_get(&arp->event, &arp->table, res);
+	return changed;
 }
 
 void arpinger_free(struct arpinger *arp)

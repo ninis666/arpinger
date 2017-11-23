@@ -44,7 +44,7 @@
 			die(# cond "\n");		\
 	} while (0)
 # else
-#  define chk(...) do { if (0 && (__VA_ARGS__)) { } } while (0)
+#  define chk(...) do { } while (0)
 # endif
 
 #endif
